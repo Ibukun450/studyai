@@ -1,5 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Brain, Zap, Crown, Star, MessageCircle, Play, Download, Trash2, Plus, Check, Menu, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, FileText, Brain, Zap, Crown, MessageCircle, Play, Trash2, Plus, Check, Menu, X, AlertCircle } from 'lucide-react';
+
+// Import the main library
+import * as pdfjsLib from "pdfjs-dist";
+
+// Check what build system you're using and set up accordingly
+const getWorkerSrc = () => {
+  // Option 1: CDN (most reliable)
+  return `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+  
+  // Option 2: If you want to serve worker locally, you'll need to copy it to public folder
+  // return `${process.env.PUBLIC_URL}/pdf.worker.min.js`;
+};
+pdfjsLib.GlobalWorkerOptions.workerSrc = getWorkerSrc();
 
 const StudyAI = () => {
   const [activeTab, setActiveTab] = useState('upload');
@@ -15,201 +28,219 @@ const StudyAI = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showQuizConfig, setShowQuizConfig] = useState(false);
   const [selectedDocForQuiz, setSelectedDocForQuiz] = useState(null);
+  const [error, setError] = useState(null);
   const [quizConfig, setQuizConfig] = useState({
     questionCount: 5,
     difficulty: 'medium',
     questionTypes: ['multiple-choice', 'true-false']
   });
 
-  // Load documents from localStorage on mount
-  useEffect(() => {
-    const savedDocs = localStorage.getItem('studyai-documents');
-    if (savedDocs) {
-      setDocuments(JSON.parse(savedDocs));
-    }
-  }, []);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-  // Save documents to localStorage
-  const saveDocuments = (docs) => {
-    localStorage.setItem('studyai-documents', JSON.stringify(docs));
-    setDocuments(docs);
-  };
-
-  // Simulate PDF text extraction
   const extractTextFromPDF = async (file) => {
-    // In a real app, you'd use pdf-parse or PDF.js
-    // For demo purposes, we'll simulate with a delay and dummy text
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    return `Sample extracted text from ${file.name}. This would contain the actual PDF content in a real implementation. 
-    
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. 
+    try {
+      setError(null);
+      const arrayBuffer = await file.arrayBuffer();
+      
+      const pdf = await pdfjsLib.getDocument({ 
+        data: arrayBuffer,
+        // Optional: Add compatibility options
+        isEvalSupported: false,
+        useSystemFonts: true
+      }).promise;
 
-Key concepts covered:
-1. Document analysis fundamentals
-2. Information extraction techniques  
-3. Knowledge management systems
-4. Educational technology applications
+      let fullText = "";
+      const maxPages = Math.min(pdf.numPages, 50); // Limit for large PDFs
+      
+      for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item) => item.str).join(" ");
+        fullText += pageText + "\n\n";
+      }
 
-This text would be much longer in a real document and would contain the actual content that students want to study from.`;
+      return fullText;
+    } catch (error) {
+      console.error('PDF extraction error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to extract text from PDF';
+      if (error.name === 'InvalidPDFException') {
+        errorMessage = 'Invalid PDF file. Please check the file and try again.';
+      } else if (error.message.includes('Worker')) {
+        errorMessage = 'PDF processing error. Please try again or use a different file.';
+      }
+      
+      setError(errorMessage);
+      throw error;
+    }
   };
+
 
   // Handle file upload
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Please upload a PDF file');
+    if (!file) return;
+
+    // Enhanced file validation
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a valid PDF file');
+      return;
+    }
+
+    // File size check (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size too large. Please upload a PDF smaller than 10MB.');
       return;
     }
 
     setLoading(true);
+    setError(null);
+
     try {
       const extractedText = await extractTextFromPDF(file);
-      const newDoc = {
-        id: Date.now(),
-        name: file.name,
-        size: file.size,
-        uploadDate: new Date().toLocaleDateString(),
-        content: extractedText
-      };
       
-      const updatedDocs = [...documents, newDoc];
-      saveDocuments(updatedDocs);
-      alert('Document uploaded successfully!');
-    } catch {
-      alert('Error processing document');
+      const newDoc = {
+        id: Date.now().toString(),
+        name: file.name,
+        content: extractedText,
+        uploadDate: new Date().toISOString(),
+        size: file.size
+      };
+
+      setDocuments(prev => [...prev, newDoc]);
+      setSelectedDoc(newDoc.id);
+      event.target.value = '';
+
+    } catch (error) {
+      console.error('File processing error:', error);
+      // Error is already set in extractTextFromPDF
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    event.target.value = '';
   };
 
-  // Simulate AI API call for Q&A
+  // Call backend AI API for Q&A
   const askQuestion = async () => {
     if (!selectedDoc || !question.trim()) return;
     
     setLoading(true);
+    setError(null);
+    
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const response = await fetch(`${API_BASE_URL}/api/ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: question,
+          context: selectedDoc.content,
+          temperature: 0.3,
+          max_tokens: 800
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setAnswer(data.reply || 'No response received');
       
-      // Simulate AI response based on document content
-      const responses = [
-        `Based on the document "${selectedDoc.name}", here's what I found: The main concepts discussed include document analysis and information extraction techniques. This relates to your question about "${question}".`,
-        `According to the uploaded document, the key points relevant to your question are: The document covers educational technology applications and knowledge management systems.`,
-        `From the document content, I can explain that: The material discusses fundamental approaches to document processing and analysis, which directly addresses your inquiry about "${question}".`
-      ];
-      
-      setAnswer(responses[Math.floor(Math.random() * responses.length)]);
-    } catch {
-      setAnswer('Sorry, I encountered an error processing your question.');
+    } catch (err) {
+      console.error('AI API error:', err);
+      setError('Failed to get AI response. Make sure the backend server is running on port 5000.');
+      setAnswer('');
     }
+    
     setLoading(false);
   };
 
-  // Generate quiz from document
+  // Generate quiz using AI
   const generateQuiz = async (doc, customConfig = null) => {
     const config = customConfig || quizConfig;
     setLoading(true);
+    setError(null);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const questionTypeText = config.questionTypes.join(' and ');
+      const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions at ${config.difficulty} difficulty level. 
       
-      // Generate questions based on user configuration
-      const questionPool = [
-        {
-          question: "What are the main concepts covered in document analysis?",
-          type: "multiple-choice",
-          options: [
-            "Information extraction and knowledge management",
-            "Data visualization and reporting", 
-            "Network security and encryption",
-            "Mobile app development"
-          ],
-          correct: 0,
-          difficulty: "easy"
+Include ${questionTypeText} questions. 
+
+For multiple-choice questions, provide the question, 4 options, and indicate which option is correct (0-3).
+For true-false questions, provide the statement and indicate if it's true or false.
+
+Format your response as a JSON array of objects with this structure:
+[
+  {
+    "question": "question text",
+    "type": "multiple-choice",
+    "options": ["option1", "option2", "option3", "option4"],
+    "correct": 0,
+    "difficulty": "easy"
+  },
+  {
+    "question": "statement text",
+    "type": "true-false",
+    "correct": true,
+    "difficulty": "medium"
+  }
+]
+
+Document content (first 3000 characters):
+${doc.content.substring(0, 3000)}`;
+
+      const response = await fetch(`${API_BASE_URL}/api/ai`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        {
-          question: "Document analysis fundamentals include educational technology applications.",
-          type: "true-false",
-          correct: true,
-          difficulty: "medium"
-        },
-        {
-          question: "What is the primary purpose of knowledge management systems?",
-          type: "multiple-choice",
-          options: [
-            "To store files randomly",
-            "To organize and retrieve information effectively",
-            "To create backup copies", 
-            "To delete old documents"
-          ],
-          correct: 1,
-          difficulty: "medium"
-        },
-        {
-          question: "Information extraction techniques are mentioned as a key concept.",
-          type: "true-false",
-          correct: true,
-          difficulty: "easy"
-        },
-        {
-          question: "Which of the following best describes automated document processing?",
-          type: "multiple-choice",
-          options: [
-            "Manual data entry by humans",
-            "Using algorithms to extract and analyze content",
-            "Printing documents on paper",
-            "Deleting unnecessary files"
-          ],
-          correct: 1,
-          difficulty: "hard"
-        },
-        {
-          question: "Educational technology applications can enhance learning outcomes.",
-          type: "true-false",
-          correct: true,
-          difficulty: "easy"
-        },
-        {
-          question: "What role does artificial intelligence play in document analysis?",
-          type: "multiple-choice",
-          options: [
-            "It replaces all human involvement",
-            "It assists in pattern recognition and content extraction",
-            "It only works with image files",
-            "It makes documents more colorful"
-          ],
-          correct: 1,
-          difficulty: "hard"
-        },
-        {
-          question: "Knowledge management systems require regular maintenance and updates.",
-          type: "true-false",
-          correct: true,
-          difficulty: "medium"
-        }
-      ];
-      
-      // Filter by difficulty and question types
-      let filteredQuestions = questionPool.filter(q => {
-        const matchesType = config.questionTypes.includes(q.type);
-        const matchesDifficulty = config.difficulty === 'all' || q.difficulty === config.difficulty;
-        return matchesType && matchesDifficulty;
+        body: JSON.stringify({
+          message: prompt,
+          context: '',
+          temperature: 0.7,
+          max_tokens: 2000
+        })
       });
-      
-      // If not enough questions match criteria, expand the pool
-      if (filteredQuestions.length < config.questionCount) {
-        filteredQuestions = questionPool.filter(q => config.questionTypes.includes(q.type));
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
+
+      const data = await response.json();
       
-      // Shuffle and select the requested number of questions
-      const shuffled = filteredQuestions.sort(() => 0.5 - Math.random());
-      const selectedQuestions = shuffled.slice(0, Math.min(config.questionCount, shuffled.length));
-      
+      // Try to parse JSON from the response
+      let questions = [];
+      try {
+        // Extract JSON array from response (in case there's extra text)
+        const jsonMatch = data.reply.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          questions = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No valid JSON found in response');
+        }
+      } catch (parseErr) {
+        console.error('Failed to parse quiz JSON:', parseErr);
+        // Fallback to hardcoded questions if AI parsing fails
+        questions = getFallbackQuestions(config);
+      }
+
+      // Validate and clean questions
+      const validQuestions = questions
+        .filter(q => q.question && q.type)
+        .slice(0, config.questionCount)
+        .map((q, index) => ({ ...q, id: index + 1 }));
+
+      if (validQuestions.length === 0) {
+        throw new Error('No valid questions generated');
+      }
+
       const generatedQuiz = {
         title: `Quiz: ${doc.name}`,
         config: config,
-        questions: selectedQuestions.map((q, index) => ({ ...q, id: index + 1 }))
+        questions: validQuestions
       };
       
       setQuiz(generatedQuiz);
@@ -217,10 +248,53 @@ This text would be much longer in a real document and would contain the actual c
       setQuizResults(null);
       setShowQuizConfig(false);
       setActiveTab('quiz');
-    } catch {
-      alert('Error generating quiz');
+      
+    } catch (err) {
+      console.error('Quiz generation error:', err);
+      setError('Failed to generate quiz. Make sure the backend server is running.');
     }
+    
     setLoading(false);
+  };
+
+  // Fallback questions if AI generation fails
+  const getFallbackQuestions = (config) => {
+    const fallbackPool = [
+      {
+        question: "What are the main topics discussed in the document?",
+        type: "multiple-choice",
+        options: [
+          "Technical concepts and methodologies",
+          "Unrelated random topics",
+          "Historical events only",
+          "Entertainment reviews"
+        ],
+        correct: 0,
+        difficulty: "easy"
+      },
+      {
+        question: "The document contains informational content.",
+        type: "true-false",
+        correct: true,
+        difficulty: "easy"
+      },
+      {
+        question: "What is the primary focus of this material?",
+        type: "multiple-choice",
+        options: [
+          "Educational or informational content",
+          "Fiction storytelling",
+          "Product advertisements",
+          "Personal diary entries"
+        ],
+        correct: 0,
+        difficulty: "medium"
+      }
+    ];
+
+    return fallbackPool
+      .filter(q => config.questionTypes.includes(q.type))
+      .slice(0, config.questionCount);
   };
 
   // Handle quiz answer
@@ -251,8 +325,7 @@ This text would be much longer in a real document and would contain the actual c
 
   // Delete document
   const deleteDocument = (docId) => {
-    const updatedDocs = documents.filter(doc => doc.id !== docId);
-    saveDocuments(updatedDocs);
+    setDocuments(prev => prev.filter(doc => doc.id !== docId));
     if (selectedDoc && selectedDoc.id === docId) {
       setSelectedDoc(null);
     }
@@ -283,6 +356,27 @@ This text would be much longer in a real document and would contain the actual c
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100"
          onClick={() => mobileMenuOpen && setMobileMenuOpen(false)}>
       
+      {/* PDF.js Script */}
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="fixed top-4 right-4 left-4 md:left-auto md:w-96 bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg z-50">
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="ml-3 text-red-400 hover:text-red-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Quiz Configuration Modal */}
       {showQuizConfig && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -310,8 +404,6 @@ This text would be much longer in a real document and would contain the actual c
                     <option value={5}>5 Questions</option>
                     <option value={8}>8 Questions</option>
                     <option value={10}>10 Questions</option>
-                    <option value={15}>15 Questions</option>
-                    <option value={20}>20 Questions</option>
                   </select>
                 </div>
 
@@ -469,7 +561,10 @@ This text would be much longer in a real document and would contain the actual c
             {/* Mobile menu button */}
             <div className="md:hidden">
               <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMobileMenuOpen(!mobileMenuOpen);
+                }}
                 className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
               >
                 {mobileMenuOpen ? (
@@ -572,26 +667,28 @@ This text would be much longer in a real document and would contain the actual c
               
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center hover:border-indigo-400 transition-colors">
                 <Upload className="h-8 w-8 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-base sm:text-lg text-gray-600 mb-4">Drag and drop your PDF file here, or click to browse</p>
+                <p className="text-base sm:text-lg text-gray-600 mb-4">Upload your PDF file to extract text and generate quizzes</p>
                 <input
                   type="file"
                   accept=".pdf"
                   onChange={handleFileUpload}
                   className="hidden"
                   id="file-upload"
+                  disabled={loading}
                 />
                 <label
                   htmlFor="file-upload"
-                  className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 border border-transparent text-sm sm:text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                  className={`inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 border border-transparent text-sm sm:text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   Choose PDF File
                 </label>
+                <p className="text-xs text-gray-500 mt-4">Powered by real PDF extraction & OpenRouter AI</p>
               </div>
               
               {loading && (
                 <div className="mt-6 text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-                  <p className="mt-2 text-gray-600">Processing document...</p>
+                  <p className="mt-2 text-gray-600">Extracting text from PDF...</p>
                 </div>
               )}
             </div>
@@ -667,7 +764,6 @@ This text would be much longer in a real document and would contain the actual c
             )}
           </div>
         )}
-
         {/* Q&A Tab */}
         {activeTab === 'qa' && (
           <div className="max-w-4xl mx-auto">
