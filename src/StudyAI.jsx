@@ -334,21 +334,15 @@ ${doc.content.substring(0, 3000)}`;
   const pricingPlans = [
     {
       name: 'Free',
-      price: '$0',
-      features: ['5 documents/month', 'Basic Q&A', '2 quizzes/month'],
+      price: '0',
+      features: ['2 documents/month', 'Basic Q&A', '2 quizzes/month'],
       current: currentPlan === 'free'
     },
     {
       name: 'Student',
-      price: '$9.99',
+      price: '2000',
       features: ['50 documents/month', 'Advanced Q&A', 'Unlimited quizzes', 'Export results'],
       current: currentPlan === 'student'
-    },
-    {
-      name: 'Pro',
-      price: '$19.99',
-      features: ['Unlimited documents', 'AI tutoring', 'Custom quizzes', 'Analytics dashboard'],
-      current: currentPlan === 'pro'
     }
   ];
 
@@ -400,10 +394,10 @@ ${doc.content.substring(0, 3000)}`;
                     }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   >
-                    <option value={3}>3 Questions</option>
                     <option value={5}>5 Questions</option>
-                    <option value={8}>8 Questions</option>
                     <option value={10}>10 Questions</option>
+                    <option value={15}>15 Questions</option>
+                    <option value={20}>20 Questions</option>
                   </select>
                 </div>
 
