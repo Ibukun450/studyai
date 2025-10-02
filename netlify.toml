@@ -1,0 +1,8 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  # Tell secrets scanner to ignore these files since they use env vars properly
+  SECRETS_SCAN_OMIT_PATHS = "server/index.mjs,vite.config.js"

@@ -21,7 +21,7 @@ dotenv.config();
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "openchat/openchat-7b:free"; // default
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000; // Changed from 5000 to 3000
 
 if (!OPENROUTER_API_KEY) {
   console.error("ERROR: OPENROUTER_API_KEY is not set in environment.");
