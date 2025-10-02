@@ -28,9 +28,9 @@ const StudyAI = () => {
     difficulty: 'medium',
     questionTypes: ['multiple-choice', 'true-false']
   });
-
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  const FREE_LIMITS = { uploads: 2, questions: 5, quizzes: 2 };
+  
+  const API_BASE_URL = "/.netlify/functions";
+  const FREE_LIMITS = { uploads: 1, questions: 3, quizzes: 1 };
 
   // Load ALL data on mount
   useEffect(() => {
@@ -241,7 +241,7 @@ const StudyAI = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai`, {
+      const response = await fetch(`${API_BASE_URL}/ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -288,7 +288,7 @@ const StudyAI = () => {
     try {
       const questionTypeText = config.questionTypes.join(' and ');
       const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions at ${config.difficulty} difficulty level. Include ${questionTypeText} questions. Format your response as a JSON array with this structure: [{"question": "question text", "type": "multiple-choice", "options": ["option1", "option2", "option3", "option4"], "correct": 0, "difficulty": "${config.difficulty}"}] Document content: ${doc.content.substring(0, 3000)}`;
-      const response = await fetch(`${API_BASE_URL}/api/ai`, {
+      const response = await fetch(`${API_BASE_URL}/ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
