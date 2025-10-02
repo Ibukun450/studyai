@@ -24,7 +24,7 @@ const StudyAI = () => {
   const [usageStats, setUsageStats] = useState({ uploads: 0, questions: 0, quizzes: 0 });
   const [showContactModal, setShowContactModal] = useState(false);
   const [quizConfig, setQuizConfig] = useState({
-    questionCount: 5,
+    questionCount: 10,
     difficulty: 'medium',
     questionTypes: ['multiple-choice', 'true-false']
   });
@@ -277,61 +277,109 @@ const StudyAI = () => {
   };
 
   const generateQuiz = async (doc, customConfig = null) => {
-    if (hasReachedLimit('quizzes')) {
-      setShowActivationModal(true);
-      setShowQuizConfig(false);
-      return;
-    }
-    const config = customConfig || quizConfig;
-    setLoading(true);
-    setError(null);
+  if (hasReachedLimit('quizzes')) {
+    setShowActivationModal(true);
+    setShowQuizConfig(false);
+    return;
+  }
+  const config = customConfig || quizConfig;
+  setLoading(true);
+  setError(null);
+  try {
+    const questionTypeText = config.questionTypes.join(' and ');
+    const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions at ${config.difficulty} difficulty level. Include ${questionTypeText} questions.
+
+IMPORTANT: For EACH question, you MUST include an "explanation" field that:
+1. Explains WHY the correct answer is right
+2. References specific information from the document
+3. Provides context to help the student learn
+
+Format your response as a JSON array with this EXACT structure:
+[{
+  "question": "question text here",
+  "type": "multiple-choice",
+  "options": ["option1", "option2", "option3", "option4"],
+  "correct": 0,
+  "difficulty": "${config.difficulty}",
+  "explanation": "Detailed explanation here referencing the document content and explaining why this answer is correct"
+}]
+
+Document content: ${doc.content.substring(0, 5000)}`;
+    
+    const response = await fetch(`${API_BASE_URL}/ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        message: prompt, 
+        context: '', 
+        temperature: 0.7, 
+        max_tokens: 4000, // Increased for more questions and explanations
+        model: "google/gemma-3n-e2b-it:free"
+      })
+    });
+    
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    let questions = [];
+    
     try {
-      const questionTypeText = config.questionTypes.join(' and ');
-      const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions at ${config.difficulty} difficulty level. Include ${questionTypeText} questions. Format your response as a JSON array with this structure: [{"question": "question text", "type": "multiple-choice", "options": ["option1", "option2", "option3", "option4"], "correct": 0, "difficulty": "${config.difficulty}"}] Document content: ${doc.content.substring(0, 3000)}`;
-      const response = await fetch(`${API_BASE_URL}/ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: prompt, 
-          context: '', 
-          temperature: 0.7, 
-          max_tokens: 2000,
-          model: "google/gemma-3n-e2b-it:free"
-        })
-      });
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      const data = await response.json();
-      let questions = [];
-      try {
-        const jsonMatch = data.reply.match(/\[[\s\S]*\]/);
-        if (jsonMatch) questions = JSON.parse(jsonMatch[0]);
-      } catch (parseErr) {
-        console.error('Failed to parse quiz JSON:', parseErr);
-        questions = getFallbackQuestions(config);
-      }
-      const validQuestions = questions.filter(q => q.question && q.type).slice(0, config.questionCount).map((q, index) => ({ ...q, id: index + 1 }));
-      if (validQuestions.length === 0) throw new Error('No valid questions generated');
-      const generatedQuiz = { title: `Quiz: ${doc.name}`, config: config, questions: validQuestions };
-      setQuiz(generatedQuiz);
-      setQuizAnswers({});
-      setQuizResults(null);
-      setShowQuizConfig(false);
-      setActiveTab('quiz');
-      setUsageStats(prev => ({ ...prev, quizzes: prev.quizzes + 1 }));
-    } catch (err) {
-      console.error('Quiz generation error:', err);
-      setError('Failed to generate quiz. Please try again.');
+      const jsonMatch = data.reply.match(/\[[\s\S]*\]/);
+      if (jsonMatch) questions = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      console.error('Failed to parse quiz JSON:', parseErr);
+      questions = getFallbackQuestions(config);
     }
-    setLoading(false);
-  };
+    
+    const validQuestions = questions
+      .filter(q => q.question && q.type && q.explanation)
+      .slice(0, config.questionCount)
+      .map((q, index) => ({ 
+        ...q, 
+        id: index + 1,
+        explanation: q.explanation || 'No explanation provided.'
+      }));
+    
+    if (validQuestions.length === 0) throw new Error('No valid questions generated');
+    
+    const generatedQuiz = { 
+      title: `Quiz: ${doc.name}`, 
+      config: config, 
+      questions: validQuestions 
+    };
+    
+    setQuiz(generatedQuiz);
+    setQuizAnswers({});
+    setQuizResults(null);
+    setShowQuizConfig(false);
+    setActiveTab('quiz');
+    setUsageStats(prev => ({ ...prev, quizzes: prev.quizzes + 1 }));
+  } catch (err) {
+    console.error('Quiz generation error:', err);
+    setError('Failed to generate quiz. Please try again.');
+  }
+  setLoading(false);
+};
 
   const getFallbackQuestions = (config) => {
-    const fallbackPool = [
-      { question: "What are the main topics discussed in the document?", type: "multiple-choice", options: ["Technical concepts and methodologies", "Unrelated random topics", "Historical events only", "Entertainment reviews"], correct: 0, difficulty: config.difficulty },
-      { question: "The document contains informational content.", type: "true-false", correct: true, difficulty: config.difficulty }
-    ];
-    return fallbackPool.filter(q => config.questionTypes.includes(q.type)).slice(0, config.questionCount);
-  };
+  const fallbackPool = [
+    { 
+      question: "What are the main topics discussed in the document?", 
+      type: "multiple-choice", 
+      options: ["Technical concepts and methodologies", "Unrelated random topics", "Historical events only", "Entertainment reviews"], 
+      correct: 0, 
+      difficulty: config.difficulty,
+      explanation: "Based on the document content, the primary focus is on technical concepts and methodologies relevant to the subject matter."
+    },
+    { 
+      question: "The document contains informational content.", 
+      type: "true-false", 
+      correct: true, 
+      difficulty: config.difficulty,
+      explanation: "This is true as the document provides educational and informational content for study purposes."
+    }
+  ];
+  return fallbackPool.filter(q => config.questionTypes.includes(q.type)).slice(0, config.questionCount);
+};
 
   const handleQuizAnswer = (questionId, answer) => {
     setQuizAnswers(prev => ({ ...prev, [questionId]: answer }));
@@ -447,11 +495,20 @@ const StudyAI = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Configure Your Quiz</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Number of Questions</label>
-                  <select value={quizConfig.questionCount} onChange={(e) => setQuizConfig(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Number of Questions</label>
+                    <select 
+                      value={quizConfig.questionCount} 
+                      onChange={(e) => setQuizConfig(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))} 
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
                     <option value={5}>5 Questions</option>
                     <option value={10}>10 Questions</option>
                     <option value={15}>15 Questions</option>
+                    <option value={20}>20 Questions</option>
+                    <option value={25}>25 Questions</option>
+                    <option value={30}>30 Questions</option>
+                    <option value={40}>40 Questions</option>
+                    <option value={50}>50 Questions</option>
                   </select>
                 </div>
                 <div>
@@ -672,38 +729,87 @@ const StudyAI = () => {
                   )}
                 </div>
                 <div className="space-y-6">
-                  {quiz.questions.map((q, index) => (
-                    <div key={q.id} className="border border-gray-200 rounded-lg p-6">
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">{index + 1}. {q.question}</h3>
-                      {q.type === 'multiple-choice' && (
-                        <div className="space-y-3">
-                          {q.options.map((option, optionIndex) => (
-                            <label key={optionIndex} className="flex items-start space-x-3 cursor-pointer">
-                              <input type="radio" name={`question-${q.id}`} value={optionIndex} checked={quizAnswers[q.id] === optionIndex} onChange={() => handleQuizAnswer(q.id, optionIndex)} className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 mt-1" disabled={quizResults} />
-                              <span className={`flex-1 ${quizResults && optionIndex === q.correct ? 'text-green-600 font-medium' : quizResults && quizAnswers[q.id] === optionIndex && optionIndex !== q.correct ? 'text-red-600' : 'text-gray-700'}`}>
-                                {option}
-                                {quizResults && optionIndex === q.correct && (<Check className="h-5 w-5 inline ml-2 text-green-600" />)}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                      {q.type === 'true-false' && (
-                        <div className="space-y-3">
-                          {[true, false].map((value, idx) => (
-                            <label key={idx} className="flex items-center space-x-3 cursor-pointer">
-                              <input type="radio" name={`question-${q.id}`} value={value.toString()} checked={quizAnswers[q.id] === value} onChange={() => handleQuizAnswer(q.id, value)} className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300" disabled={quizResults} />
-                              <span className={`${quizResults && value === q.correct ? 'text-green-600 font-medium' : quizResults && quizAnswers[q.id] === value && value !== q.correct ? 'text-red-600' : 'text-gray-700'}`}>
-                                {value ? 'True' : 'False'}
-                                {quizResults && value === q.correct && (<Check className="h-5 w-5 inline ml-2 text-green-600" />)}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    {quiz.questions.map((q, index) => (
+                      <div key={q.id} className="border border-gray-200 rounded-lg p-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-4">
+                          {index + 1}. {q.question}
+                        </h3>
+                        
+                        {q.type === 'multiple-choice' && (
+                          <div className="space-y-3">
+                            {q.options.map((option, optionIndex) => (
+                              <label key={optionIndex} className="flex items-start space-x-3 cursor-pointer">
+                                <input 
+                                  type="radio" 
+                                  name={`question-${q.id}`} 
+                                  value={optionIndex} 
+                                  checked={quizAnswers[q.id] === optionIndex} 
+                                  onChange={() => handleQuizAnswer(q.id, optionIndex)} 
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 mt-1" 
+                                  disabled={quizResults} 
+                                />
+                                <span className={`flex-1 ${
+                                  quizResults && optionIndex === q.correct 
+                                    ? 'text-green-600 font-medium' 
+                                    : quizResults && quizAnswers[q.id] === optionIndex && optionIndex !== q.correct 
+                                    ? 'text-red-600' 
+                                    : 'text-gray-700'
+                                }`}>
+                                  {option}
+                                  {quizResults && optionIndex === q.correct && (
+                                    <Check className="h-5 w-5 inline ml-2 text-green-600" />
+                                  )}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {q.type === 'true-false' && (
+                          <div className="space-y-3">
+                            {[true, false].map((value, idx) => (
+                              <label key={idx} className="flex items-center space-x-3 cursor-pointer">
+                                <input 
+                                  type="radio" 
+                                  name={`question-${q.id}`} 
+                                  value={value.toString()} 
+                                  checked={quizAnswers[q.id] === value} 
+                                  onChange={() => handleQuizAnswer(q.id, value)} 
+                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300" 
+                                  disabled={quizResults} 
+                                />
+                                <span className={`${
+                                  quizResults && value === q.correct 
+                                    ? 'text-green-600 font-medium' 
+                                    : quizResults && quizAnswers[q.id] === value && value !== q.correct 
+                                    ? 'text-red-600' 
+                                    : 'text-gray-700'
+                                }`}>
+                                  {value ? 'True' : 'False'}
+                                  {quizResults && value === q.correct && (
+                                    <Check className="h-5 w-5 inline ml-2 text-green-600" />
+                                  )}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Show explanation after quiz is submitted */}
+                        {quizResults && q.explanation && (
+                          <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
+                            <div className="flex items-start">
+                              <Brain className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-medium text-blue-900 mb-1">Explanation:</p>
+                                <p className="text-sm text-blue-800">{q.explanation}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 <div className="mt-8 flex justify-between">
                   <button onClick={() => { setQuiz(null); setActiveTab('documents'); }} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">Back to Documents</button>
                   {!quizResults ? (
