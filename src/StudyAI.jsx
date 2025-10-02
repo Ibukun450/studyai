@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Brain, Zap, Crown, MessageCircle, Play, Trash2, Plus, Check, Menu, X, AlertCircle, Copy, Lock, Mail, Phone, MessageSquare, Sparkles, Shield, Clock, Users } from 'lucide-react';
+import { Upload, FileText, Brain, Zap, Crown, MessageCircle, Play, Trash2, Plus, Check, Menu, X, AlertCircle, Copy, Lock, Mail, Phone, MessageSquare, Sparkles, Shield, Clock, Users, RefreshCw } from 'lucide-react';
 import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -29,20 +29,77 @@ const StudyAI = () => {
     questionTypes: ['multiple-choice', 'true-false']
   });
 
-  const API_BASE_URL = '/.netlify/functions';
-  // const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
   const FREE_LIMITS = { uploads: 2, questions: 5, quizzes: 2 };
 
+  // Load ALL data on mount
   useEffect(() => {
     const savedStats = localStorage.getItem('studyai_usage');
     const savedActivation = localStorage.getItem('studyai_activated');
+    const savedDocuments = localStorage.getItem('studyai_documents');
+    const savedSelectedDoc = localStorage.getItem('studyai_selected_doc');
+    const savedQuiz = localStorage.getItem('studyai_current_quiz');
+    const savedQuizAnswers = localStorage.getItem('studyai_quiz_answers');
+    const savedQuizResults = localStorage.getItem('studyai_quiz_results');
+    const savedAnswer = localStorage.getItem('studyai_last_answer');
+    const savedQuestion = localStorage.getItem('studyai_last_question');
+    
     if (savedStats) setUsageStats(JSON.parse(savedStats));
     if (savedActivation === 'true') setIsActivated(true);
+    if (savedDocuments) setDocuments(JSON.parse(savedDocuments));
+    if (savedSelectedDoc) setSelectedDoc(JSON.parse(savedSelectedDoc));
+    if (savedQuiz) setQuiz(JSON.parse(savedQuiz));
+    if (savedQuizAnswers) setQuizAnswers(JSON.parse(savedQuizAnswers));
+    if (savedQuizResults) setQuizResults(JSON.parse(savedQuizResults));
+    if (savedAnswer) setAnswer(savedAnswer);
+    if (savedQuestion) setQuestion(savedQuestion);
   }, []);
 
+  // Save usage stats
   useEffect(() => {
     localStorage.setItem('studyai_usage', JSON.stringify(usageStats));
   }, [usageStats]);
+
+  // Save documents
+  useEffect(() => {
+    localStorage.setItem('studyai_documents', JSON.stringify(documents));
+  }, [documents]);
+
+  // Save selected document
+  useEffect(() => {
+    if (selectedDoc) {
+      localStorage.setItem('studyai_selected_doc', JSON.stringify(selectedDoc));
+    }
+  }, [selectedDoc]);
+
+  // Save quiz state
+  useEffect(() => {
+    if (quiz) {
+      localStorage.setItem('studyai_current_quiz', JSON.stringify(quiz));
+    } else {
+      localStorage.removeItem('studyai_current_quiz');
+    }
+  }, [quiz]);
+
+  // Save quiz answers
+  useEffect(() => {
+    localStorage.setItem('studyai_quiz_answers', JSON.stringify(quizAnswers));
+  }, [quizAnswers]);
+
+  // Save quiz results
+  useEffect(() => {
+    if (quizResults) {
+      localStorage.setItem('studyai_quiz_results', JSON.stringify(quizResults));
+    } else {
+      localStorage.removeItem('studyai_quiz_results');
+    }
+  }, [quizResults]);
+
+  // Save Q&A
+  useEffect(() => {
+    if (answer) localStorage.setItem('studyai_last_answer', answer);
+    if (question) localStorage.setItem('studyai_last_question', question);
+  }, [answer, question]);
 
   const hasReachedLimit = (action) => {
     if (isActivated) return false;
@@ -64,6 +121,27 @@ const StudyAI = () => {
       setTimeout(() => document.body.removeChild(msg), 3000);
     } else {
       setError('Invalid activation code. Please contact support.');
+    }
+  };
+
+  const clearAllData = () => {
+    if (window.confirm('Are you sure you want to clear all data? This will delete all documents, quiz progress, and reset your usage stats. This cannot be undone!')) {
+      localStorage.clear();
+      setDocuments([]);
+      setUsageStats({ uploads: 0, questions: 0, quizzes: 0 });
+      setIsActivated(false);
+      setQuiz(null);
+      setQuizAnswers({});
+      setQuizResults(null);
+      setSelectedDoc(null);
+      setAnswer('');
+      setQuestion('');
+      setActiveTab('upload');
+      const msg = document.createElement('div');
+      msg.className = 'fixed top-4 right-4 bg-blue-50 border border-blue-200 rounded-lg p-4 shadow-lg z-50';
+      msg.innerHTML = '<div class="flex items-center"><svg class="h-5 w-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg><p class="text-sm text-blue-800">All data cleared successfully!</p></div>';
+      document.body.appendChild(msg);
+      setTimeout(() => document.body.removeChild(msg), 3000);
     }
   };
 
@@ -170,16 +248,29 @@ const StudyAI = () => {
           message: question,
           context: selectedDoc.content,
           temperature: 0.3,
-          max_tokens: 800
+          max_tokens: 800,
+          model: "google/gemma-3n-e2b-it:free"
         })
       });
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.error?.code === 403) {
+          throw new Error('Content was flagged by moderation. Please rephrase your question.');
+        }
+        throw new Error(`API error: ${response.status}`);
+      }
+      
       const data = await response.json();
       setAnswer(data.reply || 'No response received');
       setUsageStats(prev => ({ ...prev, questions: prev.questions + 1 }));
     } catch (err) {
       console.error('AI API error:', err);
-      setError('Failed to get AI response. Please ensure the backend server is running.');
+      if (err.message.includes('moderation')) {
+        setError('Your question was flagged. Try rephrasing it more generally.');
+      } else {
+        setError('Failed to get AI response. Please ensure the backend server is running.');
+      }
       setAnswer('');
     }
     setLoading(false);
@@ -200,7 +291,13 @@ const StudyAI = () => {
       const response = await fetch(`${API_BASE_URL}/api/ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: prompt, context: '', temperature: 0.7, max_tokens: 2000 })
+        body: JSON.stringify({ 
+          message: prompt, 
+          context: '', 
+          temperature: 0.7, 
+          max_tokens: 2000,
+          model: "google/gemma-3n-e2b-it:free"
+        })
       });
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const data = await response.json();
@@ -393,6 +490,9 @@ const StudyAI = () => {
                   <span className="ml-2">•</span>
                   <span className="ml-2">{usageStats.quizzes}/{FREE_LIMITS.quizzes} quizzes</span>
                 </div>
+                <button onClick={clearAllData} className="text-gray-400 hover:text-red-500" title="Clear all data">
+                  <RefreshCw className="h-4 w-4" />
+                </button>
               </div>
             )}
             <nav className="hidden md:flex space-x-8">
@@ -412,8 +512,15 @@ const StudyAI = () => {
             <div className="md:hidden pb-3">
               {!isActivated && (
                 <div className="px-2 py-2 mb-2 bg-gray-50 rounded-md text-xs text-gray-600">
-                  <div className="font-medium mb-1">Usage:</div>
-                  <div>{usageStats.uploads}/{FREE_LIMITS.uploads} uploads • {usageStats.questions}/{FREE_LIMITS.questions} Q&A • {usageStats.quizzes}/{FREE_LIMITS.quizzes} quizzes</div>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-medium mb-1">Usage:</div>
+                      <div>{usageStats.uploads}/{FREE_LIMITS.uploads} uploads • {usageStats.questions}/{FREE_LIMITS.questions} Q&A • {usageStats.quizzes}/{FREE_LIMITS.quizzes} quizzes</div>
+                    </div>
+                    <button onClick={clearAllData} className="text-gray-400 hover:text-red-500 ml-2" title="Clear all data">
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               )}
               <button onClick={() => { setActiveTab('upload'); setMobileMenuOpen(false); }} className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'upload' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500'}`}><Upload className="h-4 w-4 inline mr-2" />Upload</button>
