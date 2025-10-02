@@ -29,7 +29,8 @@ const StudyAI = () => {
     questionTypes: ['multiple-choice', 'true-false']
   });
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const API_BASE_URL = '/.netlify/functions';
+  // const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
   const FREE_LIMITS = { uploads: 2, questions: 5, quizzes: 2 };
 
   useEffect(() => {
