@@ -1,7 +1,12 @@
 // netlify/functions/ai.js
 
+const fetch = require('node-fetch');
+
 exports.handler = async (event, context) => {
-    // CORS headers to include in all responses
+    console.log('=== Function Called ===');
+    console.log('Method:', event.httpMethod);
+    console.log('Has API Key:', !!process.env.OPENROUTER_API_KEY);
+    
     const headers = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -9,7 +14,6 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
     };
 
-    // Handle CORS preflight
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 200, headers, body: '' };
     }
@@ -19,16 +23,31 @@ exports.handler = async (event, context) => {
     }
 
     try {
-        if (!event.body) {
-            return { 
-                statusCode: 400, 
+        // Check API key
+        if (!process.env.OPENROUTER_API_KEY) {
+            console.error('ERROR: OPENROUTER_API_KEY not set');
+            return {
+                statusCode: 500,
                 headers,
-                body: JSON.stringify({ error: 'Missing request body.' }) 
+                body: JSON.stringify({ error: 'Server configuration error: API key missing' })
             };
         }
 
-        const { message, context: docContext, temperature, max_tokens } = JSON.parse(event.body);
+        // Check body
+        if (!event.body) {
+            console.error('ERROR: No request body');
+            return { 
+                statusCode: 400, 
+                headers,
+                body: JSON.stringify({ error: 'Missing request body' }) 
+            };
+        }
 
+        console.log('Parsing request body...');
+        const { message, context: docContext, temperature, max_tokens } = JSON.parse(event.body);
+        console.log('Message length:', message?.length);
+
+        console.log('Calling OpenRouter API...');
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -46,38 +65,54 @@ exports.handler = async (event, context) => {
             })
         });
 
+        console.log('OpenRouter response status:', response.status);
+
         if (!response.ok) {
             const errorBody = await response.text();
-            console.error(`OpenRouter API Error ${response.status}: ${errorBody}`);
+            console.error(`OpenRouter API Error ${response.status}:`, errorBody);
             return {
                 statusCode: response.status,
                 headers,
-                body: JSON.stringify({ error: `AI API failed with status ${response.status}.`, details: errorBody })
+                body: JSON.stringify({ 
+                    error: `AI API failed with status ${response.status}`,
+                    details: errorBody 
+                })
             };
         }
 
         const data = await response.json();
+        console.log('Received data from OpenRouter');
 
         if (!data?.choices?.[0]?.message) {
-            console.error("Unexpected API response structure:", data);
+            console.error('Unexpected response structure:', JSON.stringify(data));
             return {
                 statusCode: 502,
                 headers,
-                body: JSON.stringify({ error: "AI API returned unexpected data structure." })
+                body: JSON.stringify({ error: 'AI API returned unexpected data structure' })
             };
         }
 
+        console.log('Success! Returning response');
         return {
             statusCode: 200,
             headers,
             body: JSON.stringify({ reply: data.choices[0].message.content })
         };
+
     } catch (error) {
-        console.error("Function execution error:", error.message);
+        console.error('=== FUNCTION ERROR ===');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        
         return {
             statusCode: 500,
             headers,
-            body: JSON.stringify({ error: `Function execution failed: ${error.message}` })
+            body: JSON.stringify({ 
+                error: 'Function execution failed',
+                message: error.message,
+                type: error.name
+            })
         };
     }
 };
