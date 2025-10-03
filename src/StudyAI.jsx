@@ -1122,7 +1122,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                     </div>
                   </div>
                 ) : (
-                  {/* Chat messages */}
+                  // Chat messages
                   <>
                     {chatMessages.map((msg, idx) => (
                       <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -1167,7 +1167,8 @@ Document content: ${doc.content.substring(0, 5000)}`;
                     {/* Auto-scroll anchor */}
                     <div ref={chatEndRef} />
                   </>
-                )}
+                )
+              }
               </div>
 
               {/* Chat input area */}
@@ -1222,7 +1223,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
           <div className="h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="max-w-4xl mx-auto">
               {!quiz ? (
-                /* No quiz state */}
+                // No quiz state
                 <div className="text-center bg-white rounded-lg shadow-md p-8 sm:p-12">
                   <Play className="h-12 sm:h-16 w-12 sm:w-16 text-gray-400 mx-auto mb-4" />
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Generate a Quiz</h2>
@@ -1235,7 +1236,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                   </button>
                 </div>
               ) : (
-                /* Quiz display */}
+                // Quiz display
                 <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
                     <div>
