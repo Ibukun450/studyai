@@ -41,7 +41,7 @@ exports.handler = async (event, context) => {
         const { message, context: docContext, temperature, max_tokens } = JSON.parse(event.body);
 
         // Use environment variable for model name
-        const modelName = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
+        const modelName = process.env.OPENROUTER_MODEL;
         
         console.log('Calling OpenRouter API with model:', modelName);
         
