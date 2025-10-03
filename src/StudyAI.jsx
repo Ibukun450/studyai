@@ -355,8 +355,7 @@ const StudyAI = () => {
           message: userMessage.content,
           context: selectedDoc.content,
           temperature: 0.3,
-          max_tokens: 800,
-          model: "google/gemma-3n-e2b-it:free"
+          max_tokens: 800
         })
       });
       
@@ -439,7 +438,6 @@ Document content: ${doc.content.substring(0, 5000)}`;
           context: '', 
           temperature: 0.7, 
           max_tokens: 4000,
-          model: "google/gemma-3n-e2b-it:free"
         })
       });
       
