@@ -1,11 +1,8 @@
 // netlify/functions/ai.js
-
 const fetch = require('node-fetch');
 
 exports.handler = async (event, context) => {
     console.log('=== Function Called ===');
-    console.log('Method:', event.httpMethod);
-    console.log('Has API Key:', !!process.env.OPENROUTER_API_KEY);
     
     const headers = {
         'Content-Type': 'application/json',
@@ -23,7 +20,6 @@ exports.handler = async (event, context) => {
     }
 
     try {
-        // Check API key
         if (!process.env.OPENROUTER_API_KEY) {
             console.error('ERROR: OPENROUTER_API_KEY not set');
             return {
@@ -33,7 +29,6 @@ exports.handler = async (event, context) => {
             };
         }
 
-        // Check body
         if (!event.body) {
             console.error('ERROR: No request body');
             return { 
@@ -43,11 +38,13 @@ exports.handler = async (event, context) => {
             };
         }
 
-        console.log('Parsing request body...');
         const { message, context: docContext, temperature, max_tokens } = JSON.parse(event.body);
-        console.log('Message length:', message?.length);
 
-        console.log('Calling OpenRouter API...');
+        // Use environment variable for model name
+        const modelName = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
+        
+        console.log('Calling OpenRouter API with model:', modelName);
+        
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -55,7 +52,7 @@ exports.handler = async (event, context) => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'google/gemini-2.0-flash-exp:free',
+                model: modelName, // Use variable instead of hardcoded string
                 messages: [
                     { role: 'system', content: 'You are a helpful study assistant.' },
                     { role: 'user', content: `Context: ${docContext}\n\nQuestion: ${message}` }
@@ -81,7 +78,6 @@ exports.handler = async (event, context) => {
         }
 
         const data = await response.json();
-        console.log('Received data from OpenRouter');
 
         if (!data?.choices?.[0]?.message) {
             console.error('Unexpected response structure:', JSON.stringify(data));
@@ -92,7 +88,6 @@ exports.handler = async (event, context) => {
             };
         }
 
-        console.log('Success! Returning response');
         return {
             statusCode: 200,
             headers,
@@ -101,7 +96,6 @@ exports.handler = async (event, context) => {
 
     } catch (error) {
         console.error('=== FUNCTION ERROR ===');
-        console.error('Error name:', error.name);
         console.error('Error message:', error.message);
         console.error('Error stack:', error.stack);
         
@@ -110,8 +104,7 @@ exports.handler = async (event, context) => {
             headers,
             body: JSON.stringify({ 
                 error: 'Function execution failed',
-                message: error.message,
-                type: error.name
+                message: error.message
             })
         };
     }
