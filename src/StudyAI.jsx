@@ -440,6 +440,8 @@ Document content: ${doc.content.substring(0, 5000)}`;
           max_tokens: 4000,
         })
       });
+
+      
       
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const data = await response.json();
