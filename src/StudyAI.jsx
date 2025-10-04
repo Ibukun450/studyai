@@ -298,10 +298,12 @@ const StudyAI = () => {
       const extractedText = await extractTextFromPDF(file);
       
       // Create new document object
+      const pdfUrl = URL.createObjectURL(file);
       const newDoc = {
         id: Date.now().toString(),
         name: file.name,
         content: extractedText,
+        pdfUrl: pdfUrl, // Add this line
         uploadDate: new Date().toLocaleDateString(),
         size: (file.size / 1024).toFixed(2) + ' KB'
       };
@@ -1048,15 +1050,14 @@ Document content: ${doc.content.substring(0, 5000)}`;
                       </div>
                     </div>
                     
-                    {/* Document content preview */}
-                    <div className="prose prose-sm max-w-none">
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                          {selectedDoc.content.substring(0, 2000)}
-                          {selectedDoc.content.length > 2000 && '...'}
-                        </p>
+                  {/* Document content preview */}
+                      <div className="w-full h-full">
+                        <iframe
+                          src={selectedDoc.pdfUrl}
+                          className="w-full h-[calc(100vh-200px)] border-0 rounded-lg"
+                          title="PDF Preview"
+                        />
                       </div>
-                    </div>
                   </div>
                 )}
               </div>
