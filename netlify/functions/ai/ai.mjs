@@ -1,9 +1,11 @@
 // netlify/functions/ai.js
-const fetch = require('node-fetch');
+
+// ✅ Remove node-fetch import (Netlify’s Node 18+ has fetch built-in)
+// const fetch = require('node-fetch');  ❌ remove this line
 
 exports.handler = async (event, context) => {
     console.log('=== Function Called ===');
-    
+
     const headers = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -11,15 +13,17 @@ exports.handler = async (event, context) => {
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
     };
 
+    // ✅ Handle preflight CORS requests
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 200, headers, body: '' };
     }
-    
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, headers, body: 'Method Not Allowed' };
     }
 
     try {
+        // ✅ Ensure env vars exist
         if (!process.env.OPENROUTER_API_KEY) {
             console.error('ERROR: OPENROUTER_API_KEY not set');
             return {
@@ -39,12 +43,11 @@ exports.handler = async (event, context) => {
         }
 
         const { message, context: docContext, temperature, max_tokens } = JSON.parse(event.body);
+        const modelName = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
 
-        // Use environment variable for model name
-        const modelName = process.env.OPENROUTER_MODEL;
-        
         console.log('Calling OpenRouter API with model:', modelName);
-        
+
+        // ✅ Use native fetch directly (no import)
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -52,7 +55,7 @@ exports.handler = async (event, context) => {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: modelName, // Use variable instead of hardcoded string
+                model: modelName,
                 messages: [
                     { role: 'system', content: 'You are a helpful study assistant.' },
                     { role: 'user', content: `Context: ${docContext}\n\nQuestion: ${message}` }
@@ -98,7 +101,7 @@ exports.handler = async (event, context) => {
         console.error('=== FUNCTION ERROR ===');
         console.error('Error message:', error.message);
         console.error('Error stack:', error.stack);
-        
+
         return {
             statusCode: 500,
             headers,
