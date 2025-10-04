@@ -442,7 +442,6 @@ Document content: ${doc.content.substring(0, 5000)}`;
       });
 
       
-      
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const data = await response.json();
       let questions = [];
