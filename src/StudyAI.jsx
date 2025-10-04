@@ -643,7 +643,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
               
               {/* Contact options */}
               <div className="space-y-4">
-                <a href="https://wa.me/1234567890" target="_blank" rel="noopener noreferrer" className="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                <a href="https://wa.me/07069928785" target="_blank" rel="noopener noreferrer" className="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
                   <MessageSquare className="h-6 w-6 text-green-600 mr-3 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">WhatsApp</p>
@@ -657,7 +657,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                     <p className="text-xs text-gray-600">support@studyai.com</p>
                   </div>
                 </a>
-                <a href="tel:+1234567890" className="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                <a href="tel:+07069928785" className="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
                   <Phone className="h-6 w-6 text-purple-600 mr-3 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Phone</p>
@@ -1428,7 +1428,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                       <Crown className="h-8 w-8 text-yellow-300" />
                     </div>
                     <div className="mb-6">
-                      <span className="text-3xl sm:text-4xl font-bold">₦2,000</span>
+                      <span className="text-3xl sm:text-4xl font-bold">₦1,000</span>
                       <span className="text-indigo-200">/month</span>
                     </div>
                     <ul className="space-y-4 mb-8">
@@ -1474,7 +1474,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                   <p className="text-sm sm:text-base text-gray-600 mb-6">Contact us to get your activation code and unlock premium features instantly</p>
                   <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
                     <a 
-                      href="https://wa.me/1234567890" 
+                      href="https://wa.me/07069928785" 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base"
@@ -1488,7 +1488,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                       <Mail className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />Email Us
                     </a>
                     <a 
-                      href="tel:+1234567890" 
+                      href="tel:+07069928785" 
                       className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
                     >
                       <Phone className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />Call Us
