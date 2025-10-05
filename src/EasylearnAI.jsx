@@ -1,11 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, Brain, Zap, Crown, MessageCircle, Play, Trash2, Plus, Check, Menu, X, AlertCircle, Copy, Lock, Mail, Phone, MessageSquare, Sparkles, Shield, Clock, Users, RefreshCw, Send, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as pdfjsLib from "pdfjs-dist";
+import ReactMarkdown from 'react-markdown';
+
+// To enable rich formatting for AI responses, please install the following packages:
+// npm install react-markdown
+// npm install -D @tailwindcss/typography
+//
+// Then, add the typography plugin to your tailwind.config.js:
+// plugins: [
+//   require('@tailwindcss/typography'),
+// ],
+
 
 // Configure PDF.js worker - using jsdelivr CDN for better reliability
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 
-const StudyAI = () => {
+const EasylearnAI = () => {
   // ============================================
   // STATE MANAGEMENT
   // ============================================
@@ -58,14 +69,14 @@ const StudyAI = () => {
    * This ensures user data persists across sessions
    */
   useEffect(() => {
-    const savedStats = localStorage.getItem('studyai_usage');
-    const savedActivation = localStorage.getItem('studyai_activated');
-    const savedDocuments = localStorage.getItem('studyai_documents');
-    const savedSelectedDoc = localStorage.getItem('studyai_selected_doc');
-    const savedQuiz = localStorage.getItem('studyai_current_quiz');
-    const savedQuizAnswers = localStorage.getItem('studyai_quiz_answers');
-    const savedQuizResults = localStorage.getItem('studyai_quiz_results');
-    const savedChatMessages = localStorage.getItem('studyai_chat_messages');
+    const savedStats = localStorage.getItem('easylearnai_usage');
+    const savedActivation = localStorage.getItem('easylearnai_activated');
+    const savedDocuments = localStorage.getItem('easylearnai_documents');
+    const savedSelectedDoc = localStorage.getItem('easylearnai_selected_doc');
+    const savedQuiz = localStorage.getItem('easylearnai_current_quiz');
+    const savedQuizAnswers = localStorage.getItem('easylearnai_quiz_answers');
+    const savedQuizResults = localStorage.getItem('easylearnai_quiz_results');
+    const savedChatMessages = localStorage.getItem('easylearnai_chat_messages');
     
     if (savedStats) setUsageStats(JSON.parse(savedStats));
     if (savedActivation === 'true') setIsActivated(true);
@@ -86,40 +97,40 @@ const StudyAI = () => {
 
   // Save data to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('studyai_usage', JSON.stringify(usageStats));
+    localStorage.setItem('easylearnai_usage', JSON.stringify(usageStats));
   }, [usageStats]);
 
   useEffect(() => {
-    localStorage.setItem('studyai_documents', JSON.stringify(documents));
+    localStorage.setItem('easylearnai_documents', JSON.stringify(documents));
   }, [documents]);
 
   useEffect(() => {
     if (selectedDoc) {
-      localStorage.setItem('studyai_selected_doc', JSON.stringify(selectedDoc));
+      localStorage.setItem('easylearnai_selected_doc', JSON.stringify(selectedDoc));
     }
   }, [selectedDoc]);
 
   useEffect(() => {
-    localStorage.setItem('studyai_chat_messages', JSON.stringify(chatMessages));
+    localStorage.setItem('easylearnai_chat_messages', JSON.stringify(chatMessages));
   }, [chatMessages]);
 
   useEffect(() => {
     if (quiz) {
-      localStorage.setItem('studyai_current_quiz', JSON.stringify(quiz));
+      localStorage.setItem('easylearnai_current_quiz', JSON.stringify(quiz));
     } else {
-      localStorage.removeItem('studyai_current_quiz');
+      localStorage.removeItem('easylearnai_current_quiz');
     }
   }, [quiz]);
 
   useEffect(() => {
-    localStorage.setItem('studyai_quiz_answers', JSON.stringify(quizAnswers));
+    localStorage.setItem('easylearnai_quiz_answers', JSON.stringify(quizAnswers));
   }, [quizAnswers]);
 
   useEffect(() => {
     if (quizResults) {
-      localStorage.setItem('studyai_quiz_results', JSON.stringify(quizResults));
+      localStorage.setItem('easylearnai_quiz_results', JSON.stringify(quizResults));
     } else {
-      localStorage.removeItem('studyai_quiz_results');
+      localStorage.removeItem('easylearnai_quiz_results');
     }
   }, [quizResults]);
 
@@ -207,10 +218,10 @@ const StudyAI = () => {
    * Validate and activate premium features
    */
   const handleActivation = () => {
-    const validCodes = ['STUDYAI2024', 'PREMIUM123', 'UNLOCK999'];
+    const validCodes = ['EASYLEARN2025', 'PREMIUM123', 'UNLOCKNOW'];
     if (validCodes.includes(activationCode.toUpperCase())) {
       setIsActivated(true);
-      localStorage.setItem('studyai_activated', 'true');
+      localStorage.setItem('easylearnai_activated', 'true');
       setShowActivationModal(false);
       setActivationCode('');
       setError(null);
@@ -641,29 +652,29 @@ Document content: ${doc.content.substring(0, 5000)}`;
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Us for Premium Access</h3>
-              <p className="text-sm text-gray-600 mb-6">Get your activation code and unlock unlimited access to StudyAI Premium.</p>
+              <p className="text-sm text-gray-600 mb-6">Get your activation code and unlock unlimited access to EasylearnAI Premium.</p>
               
               {/* Contact options */}
               <div className="space-y-4">
-                <a href="https://wa.me/07069928785" target="_blank" rel="noopener noreferrer" className="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+                <a href="https://wa.me/2347069928785" target="_blank" rel="noopener noreferrer" className="flex items-center p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
                   <MessageSquare className="h-6 w-6 text-green-600 mr-3 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">WhatsApp</p>
                     <p className="text-xs text-gray-600">Chat with us instantly</p>
                   </div>
                 </a>
-                <a href="mailto:support@studyai.com" className="flex items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                <a href="mailto:dibukun45@gmail.com" className="flex items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
                   <Mail className="h-6 w-6 text-blue-600 mr-3 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Email</p>
-                    <p className="text-xs text-gray-600">support@studyai.com</p>
+                    <p className="text-xs text-gray-600">dibukun45@gmail.com</p>
                   </div>
                 </a>
-                <a href="tel:+07069928785" className="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                <a href="tel:+2347069928785" className="flex items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
                   <Phone className="h-6 w-6 text-purple-600 mr-3 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Phone</p>
-                    <p className="text-xs text-gray-600">+1 (234) 567-890</p>
+                    <p className="text-xs text-gray-600">+234 706 992 8785</p>
                   </div>
                 </a>
               </div>
@@ -746,7 +757,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
             {/* Logo and branding */}
             <div className="flex items-center space-x-2">
               <Brain className="h-8 w-8 text-indigo-600" />
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">StudyAI</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EasylearnAI</h1>
               {isActivated && (
                 <span className="ml-2 px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">
                   PREMIUM
@@ -1064,9 +1075,9 @@ Document content: ${doc.content.substring(0, 5000)}`;
             </div>
 
             {/* RIGHT PANEL - Chat Interface */}
-            <div className={`${!showDocPreview ? 'flex' : 'hidden'} lg:flex flex-col w-full lg:w-1/2 bg-white`}>
+            <div className={`${!showDocPreview ? 'flex' : 'hidden'} lg:flex flex-col h-full w-full lg:w-1/2 bg-white`}>
               {/* Chat header */}
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-600">
+              <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-indigo-500 to-purple-600 flex-shrink-0">
                 <button 
                   onClick={() => setShowDocPreview(true)} 
                   className="lg:hidden p-2 text-white hover:text-indigo-100 transition-colors"
@@ -1075,7 +1086,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                 </button>
                 <div className="flex items-center space-x-2 flex-1">
                   <Brain className="h-5 w-5 text-white" />
-                  <h3 className="font-semibold text-white">AI Assistant</h3>
+                  <h3 className="font-semibold text-white">EasylearnAI Assistant</h3>
                 </div>
                 {chatMessages.length > 0 && (
                   <button 
@@ -1132,7 +1143,13 @@ Document content: ${doc.content.substring(0, 5000)}`;
                               <Brain className="h-5 w-5 text-indigo-600 flex-shrink-0 mt-0.5" />
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                              {msg.role === 'user' ? (
+                                <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                              ) : (
+                                <div className="prose prose-sm max-w-none text-gray-900">
+                                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                </div>
+                              )}
                               <div className="flex items-center justify-between mt-1">
                                 <span className={`text-xs ${msg.role === 'user' ? 'text-indigo-200' : 'text-gray-500'}`}>
                                   {msg.timestamp}
@@ -1173,7 +1190,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
 
               {/* Chat input area */}
               {selectedDoc && (
-                <div className="p-4 border-t border-gray-200 bg-gray-50">
+                <div className="p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
                   {!isActivated && (
                     <div className="mb-2 text-xs text-gray-500 text-center">
                       {FREE_LIMITS.questions - usageStats.questions} question{FREE_LIMITS.questions - usageStats.questions !== 1 ? 's' : ''} remaining
@@ -1475,7 +1492,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                   <p className="text-sm sm:text-base text-gray-600 mb-6">Contact us to get your activation code and unlock premium features instantly</p>
                   <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
                     <a 
-                      href="https://wa.me/07069928785" 
+                      href="https://wa.me/2347069928785" 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base"
@@ -1483,13 +1500,13 @@ Document content: ${doc.content.substring(0, 5000)}`;
                       <MessageSquare className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />WhatsApp Us
                     </a>
                     <a 
-                      href="mailto:support@studyai.com" 
+                      href="mailto:dibukun45@gmail.com" 
                       className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm sm:text-base"
                     >
                       <Mail className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />Email Us
                     </a>
                     <a 
-                      href="tel:+07069928785" 
+                      href="tel:+2347069928785" 
                       className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
                     >
                       <Phone className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />Call Us
@@ -1528,4 +1545,4 @@ Document content: ${doc.content.substring(0, 5000)}`;
   );
 };
 
-export default StudyAI;
+export default EasylearnAI;
