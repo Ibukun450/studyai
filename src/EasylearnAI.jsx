@@ -43,11 +43,15 @@ const EasylearnAI = () => {
   const [quizResults, setQuizResults] = useState(null);
   const [showQuizConfig, setShowQuizConfig] = useState(false);
   const [selectedDocForQuiz, setSelectedDocForQuiz] = useState(null);
-  const [quizConfig, setQuizConfig] = useState({
+const [quizConfig, setQuizConfig] = useState({
     questionCount: 10,
-    difficulty: 'medium',
+    isTimed: false, // New: To enable/disable the timer
+    timeLimit: 300, // New: Time in seconds (e.g., 300s = 5 minutes)
     questionTypes: ['multiple-choice', 'true-false']
   });
+  
+  // New state to manage the countdown during the quiz
+  const [timeLeft, setTimeLeft] = useState(null);
   
   // Premium features
   const [showActivationModal, setShowActivationModal] = useState(false);
@@ -133,7 +137,37 @@ const EasylearnAI = () => {
       localStorage.removeItem('easylearnai_quiz_results');
     }
   }, [quizResults]);
+/**
+   * Handles the quiz timer countdown
+   */
+  useEffect(() => {
+    // Check if the quiz is active, timed, and not yet submitted
+    if (activeTab === 'quiz' && quiz?.config.isTimed && quizResults === null) {
+      // Set the initial time
+      if (timeLeft === null) {
+        setTimeLeft(quiz.config.timeLimit);
+      }
 
+      // Create an interval to tick down every second
+      const timerInterval = setInterval(() => {
+        setTimeLeft(prevTime => {
+          if (prevTime <= 1) {
+            clearInterval(timerInterval);
+            showToast("Time's up! Submitting your answers.", 'info');
+            submitQuiz(); // Auto-submit the quiz
+            return 0;
+          }
+          return prevTime - 1;
+        });
+      }, 1000);
+
+      // Cleanup function to clear interval when component unmounts or dependencies change
+      return () => clearInterval(timerInterval);
+    } else {
+      // Reset timer when quiz is not active
+      setTimeLeft(null);
+    }
+  }, [quiz, activeTab, quizResults]);
   // ============================================
   // UTILITY FUNCTIONS
   // ============================================
@@ -424,7 +458,7 @@ const EasylearnAI = () => {
     
     try {
       const questionTypeText = config.questionTypes.join(' and ');
-      const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions at ${config.difficulty} difficulty level. Include ${questionTypeText} questions.
+      const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions. Include ${questionTypeText} questions.
 
 IMPORTANT: For EACH question, you MUST include an "explanation" field that:
 1. Explains WHY the correct answer is right
@@ -450,7 +484,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
           message: prompt, 
           context: '', 
           temperature: 0.7, 
-          max_tokens: 4000,
+          max_tokens: 8000,
         })
       });
 
@@ -526,7 +560,13 @@ Document content: ${doc.content.substring(0, 5000)}`;
     ];
     return fallbackPool.filter(q => config.questionTypes.includes(q.type)).slice(0, config.questionCount);
   };
-
+    // Helper function to format seconds into MM:SS
+      const formatTime = (seconds) => {
+        if (seconds === null || seconds < 0) return '00:00';
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+      };
   /**
    * Handle quiz answer selection
    * @param {number} questionId - Question ID
@@ -706,26 +746,50 @@ Document content: ${doc.content.substring(0, 5000)}`;
                     onChange={(e) => setQuizConfig(prev => ({ ...prev, questionCount: parseInt(e.target.value) }))} 
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value={5}>5 Questions</option>
-                    <option value={10}>10 Questions</option>
-                    <option value={15}>15 Questions</option>
-                    <option value={20}>20 Questions</option>
+                      <option value={5}>5 Questions</option>
+                      <option value={10}>10 Questions</option>
+                      <option value={15}>15 Questions</option>
+                      <option value={20}>20 Questions</option>
+                      <option value={25}>25 Questions</option>
+                      <option value={30}>30 Questions</option>
                   </select>
                 </div>
                 
-                {/* Difficulty selector */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty Level</label>
-                  <select 
-                    value={quizConfig.difficulty} 
-                    onChange={(e) => setQuizConfig(prev => ({ ...prev, difficulty: e.target.value }))} 
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                  </select>
-                  </div>
+               {/* Timer Configuration */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">Quiz Timer</label>
+  <div className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
+    <span className="text-sm text-gray-800">Enable Timer</span>
+    {/* Simple Toggle Switch */}
+    <label htmlFor="timer-toggle" className="relative inline-flex items-center cursor-pointer">
+      <input 
+        type="checkbox" 
+        id="timer-toggle" 
+        className="sr-only peer" 
+        checked={quizConfig.isTimed}
+        onChange={(e) => setQuizConfig(prev => ({ ...prev, isTimed: e.target.checked }))}
+      />
+      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+    </label>
+  </div>
+  
+  {/* Conditionally render the time limit selector */}
+  {quizConfig.isTimed && (
+    <div className="mt-3">
+      <label className="block text-sm font-medium text-gray-700 mb-2">Time Limit</label>
+      <select 
+        value={quizConfig.timeLimit} 
+        onChange={(e) => setQuizConfig(prev => ({ ...prev, timeLimit: parseInt(e.target.value) }))} 
+        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        <option value={180}>3 Minutes</option>
+        <option value={300}>5 Minutes</option>
+        <option value={600}>10 Minutes</option>
+        <option value={900}>15 Minutes</option>
+      </select>
+    </div>
+  )}
+</div>
               </div>
               
               <div className="flex justify-end space-x-3 mt-6">
@@ -1053,7 +1117,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                   /* Document preview */
                   <div>
                     <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-lg p-4 mb-4">
-                      <h4 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">{selectedDoc.name}</h4>
+                     <h4 className="font-semibold text-gray-900 mb-2 text-xs sm:text-sm truncate">{selectedDoc.name}</h4>
                       <div className="flex items-center text-xs sm:text-sm text-gray-600 space-x-4">
                         <span>{selectedDoc.uploadDate}</span>
                         <span>•</span>
@@ -1062,13 +1126,28 @@ Document content: ${doc.content.substring(0, 5000)}`;
                     </div>
                     
                   {/* Document content preview */}
-                      <div className="w-full h-full">
-                        <iframe
-                          src={selectedDoc.pdfUrl}
-                          className="w-full h-[calc(100vh-200px)] border-0 rounded-lg"
-                          title="PDF Preview"
-                        />
-                      </div>
+                      {/* Document content preview */}
+<div className="w-full h-full text-center p-4">
+    <p className="text-sm text-gray-600 mb-4 lg:hidden">
+      PDF preview may not load on mobile. Please use the button below.
+    </p>
+    {/* Link to open in new tab (good for mobile) */}
+    <a
+      href={selectedDoc.pdfUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="lg:hidden inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm transition-colors"
+    >
+      <FileText className="h-4 w-4 mr-2" />
+      Open PDF in New Tab
+    </a>
+    {/* Iframe for desktop */}
+    <iframe
+      src={selectedDoc.pdfUrl}
+      className="hidden lg:block w-full h-[calc(100vh-200px)] border-0 rounded-lg"
+      title="PDF Preview"
+    />
+</div>
                   </div>
                 )}
               </div>
@@ -1259,9 +1338,15 @@ Document content: ${doc.content.substring(0, 5000)}`;
                     <div>
                       <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{quiz.title}</h2>
                       <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                        {quiz.questions.length} questions • {quiz.config.difficulty} difficulty
+                        {quiz.questions.length} questions • {quiz.config.isTimed ? `${quiz.config.timeLimit / 60} minute timer` : 'No timer'}
                       </p>
                     </div>
+                    {/* Timer Display */}
+                    {quiz.config.isTimed && quizResults === null && timeLeft !== null && (
+                      <div className="bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-lg px-4 py-2 text-center">
+                        <span className="font-mono text-2xl font-bold tracking-widest">{formatTime(timeLeft)}</span>
+                      </div>
+                    )}
                     {quizResults && (
                       <div className="text-center sm:text-right">
                         <div className="text-2xl sm:text-3xl font-bold text-indigo-600">{quizResults.percentage}%</div>
