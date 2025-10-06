@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Upload, FileText, Brain, Zap, Crown, MessageCircle, Play, Trash2, Plus, Check, Menu, X, AlertCircle, Copy, Lock, Mail, Phone, MessageSquare, Sparkles, Shield, Clock, Users, RefreshCw, Send, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as pdfjsLib from "pdfjs-dist";
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 // To enable rich formatting for AI responses, please install the following packages:
-// npm install react-markdown
+// npm install react-markdown remark-math rehype-katex
 // npm install -D @tailwindcss/typography
 //
 // Then, add the typography plugin to your tailwind.config.js:
@@ -43,7 +46,7 @@ const EasylearnAI = () => {
   const [quizResults, setQuizResults] = useState(null);
   const [showQuizConfig, setShowQuizConfig] = useState(false);
   const [selectedDocForQuiz, setSelectedDocForQuiz] = useState(null);
-const [quizConfig, setQuizConfig] = useState({
+  const [quizConfig, setQuizConfig] = useState({
     questionCount: 10,
     isTimed: false, // New: To enable/disable the timer
     timeLimit: 300, // New: Time in seconds (e.g., 300s = 5 minutes)
@@ -52,6 +55,9 @@ const [quizConfig, setQuizConfig] = useState({
   
   // New state to manage the countdown during the quiz
   const [timeLeft, setTimeLeft] = useState(null);
+
+  // New state for batched quiz generation progress
+  const [quizGenerationProgress, setQuizGenerationProgress] = useState(null); // { stage, message, current, total }
   
   // Premium features
   const [showActivationModal, setShowActivationModal] = useState(false);
@@ -73,14 +79,47 @@ const [quizConfig, setQuizConfig] = useState({
    * This ensures user data persists across sessions
    */
   useEffect(() => {
-    const savedStats = localStorage.getItem('easylearnai_usage');
-    const savedActivation = localStorage.getItem('easylearnai_activated');
-    const savedDocuments = localStorage.getItem('easylearnai_documents');
-    const savedSelectedDoc = localStorage.getItem('easylearnai_selected_doc');
-    const savedQuiz = localStorage.getItem('easylearnai_current_quiz');
-    const savedQuizAnswers = localStorage.getItem('easylearnai_quiz_answers');
-    const savedQuizResults = localStorage.getItem('easylearnai_quiz_results');
-    const savedChatMessages = localStorage.getItem('easylearnai_chat_messages');
+    // In-memory fallback for environments where localStorage is not available
+    const safeLocalStorage = {
+      getItem: (key) => {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          console.warn('localStorage is not available. Data will not persist.');
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          // Do nothing if localStorage is not available
+        }
+      },
+      removeItem: (key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // Do nothing
+        }
+      },
+       clear: () => {
+        try {
+          localStorage.clear();
+        } catch {
+          // Do nothing
+        }
+      }
+    };
+    
+    const savedStats = safeLocalStorage.getItem('easylearnai_usage');
+    const savedActivation = safeLocalStorage.getItem('easylearnai_activated');
+    const savedDocuments = safeLocalStorage.getItem('easylearnai_documents');
+    const savedSelectedDoc = safeLocalStorage.getItem('easylearnai_selected_doc');
+    const savedQuiz = safeLocalStorage.getItem('easylearnai_current_quiz');
+    const savedQuizAnswers = safeLocalStorage.getItem('easylearnai_quiz_answers');
+    const savedQuizResults = safeLocalStorage.getItem('easylearnai_quiz_results');
+    const savedChatMessages = safeLocalStorage.getItem('easylearnai_chat_messages');
     
     if (savedStats) setUsageStats(JSON.parse(savedStats));
     if (savedActivation === 'true') setIsActivated(true);
@@ -142,7 +181,7 @@ const [quizConfig, setQuizConfig] = useState({
    */
   useEffect(() => {
     // Check if the quiz is active, timed, and not yet submitted
-    if (activeTab === 'quiz' && quiz?.config.isTimed && quizResults === null) {
+    if (quiz?.config.isTimed && quizResults === null) {
       // Set the initial time
       if (timeLeft === null) {
         setTimeLeft(quiz.config.timeLimit);
@@ -167,7 +206,7 @@ const [quizConfig, setQuizConfig] = useState({
       // Reset timer when quiz is not active
       setTimeLeft(null);
     }
-  }, [quiz, activeTab, quizResults]);
+  }, [quiz, quizResults]);
   // ============================================
   // UTILITY FUNCTIONS
   // ============================================
@@ -402,7 +441,7 @@ const [quizConfig, setQuizConfig] = useState({
           message: userMessage.content,
           context: selectedDoc.content,
           temperature: 0.3,
-          max_tokens: 800
+          max_tokens: 1500
         })
       });
       
@@ -441,69 +480,87 @@ const [quizConfig, setQuizConfig] = useState({
   // ============================================
   
   /**
-   * Generate quiz from document content
+   * Generate quiz from document content using batching for large quizzes
    * @param {Object} doc - Document to create quiz from
-   * @param {Object} customConfig - Optional quiz configuration
    */
-  const generateQuiz = async (doc, customConfig = null) => {
+  const generateQuiz = async (doc) => {
     if (hasReachedLimit('quizzes')) {
       setShowActivationModal(true);
       setShowQuizConfig(false);
       return;
     }
     
-    const config = customConfig || quizConfig;
-    setLoading(true);
+    const config = quizConfig;
     setError(null);
+    setShowQuizConfig(false);
     
+    const BATCH_SIZE = 25; // Generate 25 questions per API call
+    const numBatches = Math.ceil(config.questionCount / BATCH_SIZE);
+    let allQuestions = [];
+
     try {
-      const questionTypeText = config.questionTypes.join(' and ');
-      const prompt = `Based on the following document content, generate ${config.questionCount} quiz questions. Include ${questionTypeText} questions.
+      for (let i = 0; i < numBatches; i++) {
+        const questionsInBatch = (i === numBatches - 1) 
+          ? config.questionCount - (i * BATCH_SIZE) 
+          : BATCH_SIZE;
+
+        setQuizGenerationProgress({
+            stage: 'batch',
+            message: `Generating questions... (Batch ${i + 1} of ${numBatches})`,
+            current: i + 1,
+            total: numBatches,
+        });
+
+        const questionTypeText = config.questionTypes.join(' and ');
+        const prompt = `Based on the document content, generate ${questionsInBatch} quiz questions. Include ${questionTypeText} questions.
+For any questions or explanations involving mathematical formulas, USE LATEX SYNTAX. Use $...$ for inline math and $$...$$ for block-level equations.
 
 IMPORTANT: For EACH question, you MUST include an "explanation" field that:
 1. Explains WHY the correct answer is right
 2. References specific information from the document
 3. Provides context to help the student learn
 
-Format your response as a JSON array with this EXACT structure:
+Format your response as a valid JSON array of objects with this EXACT structure:
 [{
   "question": "question text here",
   "type": "multiple-choice",
   "options": ["option1", "option2", "option3", "option4"],
   "correct": 0,
-  "difficulty": "${config.difficulty}",
-  "explanation": "Detailed explanation here referencing the document content and explaining why this answer is correct"
+  "explanation": "Detailed explanation here referencing the document content, explaining why this answer is correct, and using LaTeX for math like $E = mc^2$."
 }]
 
-Document content: ${doc.content.substring(0, 5000)}`;
+Document content: ${doc.content.substring(0, 15000)}`;
       
-      const response = await fetch(`${API_BASE_URL}/ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: prompt, 
-          context: '', 
-          temperature: 0.7, 
-          max_tokens: 8000,
-        })
-      });
+        const response = await fetch(`${API_BASE_URL}/ai`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                message: prompt, 
+                context: '', 
+                temperature: 0.7, 
+                max_tokens: 8000,
+            })
+        });
 
-      
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      const data = await response.json();
-      let questions = [];
-      
-      // Try to parse JSON from response
-      try {
-        const jsonMatch = data.reply.match(/\[[\s\S]*\]/);
-        if (jsonMatch) questions = JSON.parse(jsonMatch[0]);
-      } catch (parseErr) {
-        console.error('Failed to parse quiz JSON:', parseErr);
-        questions = getFallbackQuestions(config);
+        if (!response.ok) throw new Error(`API error on batch ${i+1}: ${response.status}`);
+        
+        const data = await response.json();
+        let batchQuestions = [];
+        try {
+            const jsonMatch = data.reply.match(/\[[\s\S]*\]/);
+            if (jsonMatch) batchQuestions = JSON.parse(jsonMatch[0]);
+        } catch (parseErr) {
+            console.error(`Failed to parse quiz JSON for batch ${i + 1}:`, parseErr);
+            throw new Error(`The AI returned an invalid format for batch ${i + 1}. Please try again.`);
+        }
+        
+        allQuestions = [...allQuestions, ...batchQuestions];
       }
       
-      // Validate and format questions
-      const validQuestions = questions
+      setQuizGenerationProgress({ stage: 'finalizing', message: 'Finalizing your quiz...', current: numBatches, total: numBatches });
+
+      // Validate and format all questions together
+      const validQuestions = allQuestions
         .filter(q => q.question && q.type && q.explanation)
         .slice(0, config.questionCount)
         .map((q, index) => ({ 
@@ -512,7 +569,9 @@ Document content: ${doc.content.substring(0, 5000)}`;
           explanation: q.explanation || 'No explanation provided.'
         }));
       
-      if (validQuestions.length === 0) throw new Error('No valid questions generated');
+      if (validQuestions.length < config.questionCount / 2) { // Check if we got a reasonable number of questions
+          throw new Error('AI failed to generate a sufficient number of valid questions.');
+      }
       
       const generatedQuiz = { 
         title: `Quiz: ${doc.name}`, 
@@ -523,43 +582,19 @@ Document content: ${doc.content.substring(0, 5000)}`;
       setQuiz(generatedQuiz);
       setQuizAnswers({});
       setQuizResults(null);
-      setShowQuizConfig(false);
       setActiveTab('quiz');
       setUsageStats(prev => ({ ...prev, quizzes: prev.quizzes + 1 }));
       showToast('Quiz generated successfully!', 'success');
     } catch (err) {
       console.error('Quiz generation error:', err);
-      setError('Failed to generate quiz. Please try again.');
+      setError(`Failed to generate quiz: ${err.message}`);
+      setQuiz(null); // Ensure no partial quiz is shown
     } finally {
-      setLoading(false);
+      setQuizGenerationProgress(null);
     }
   };
 
-  /**
-   * Provide fallback quiz questions if AI generation fails
-   * @param {Object} config - Quiz configuration
-   * @returns {Array} - Array of fallback questions
-   */
-  const getFallbackQuestions = (config) => {
-    const fallbackPool = [
-      { 
-        question: "What are the main topics discussed in the document?", 
-        type: "multiple-choice", 
-        options: ["Technical concepts and methodologies", "Unrelated random topics", "Historical events only", "Entertainment reviews"], 
-        correct: 0, 
-        difficulty: config.difficulty,
-        explanation: "Based on the document content, the primary focus is on technical concepts and methodologies relevant to the subject matter."
-      },
-      { 
-        question: "The document contains informational content.", 
-        type: "true-false", 
-        correct: true, 
-        difficulty: config.difficulty,
-        explanation: "This is true as the document provides educational and informational content for study purposes."
-      }
-    ];
-    return fallbackPool.filter(q => config.questionTypes.includes(q.type)).slice(0, config.questionCount);
-  };
+
     // Helper function to format seconds into MM:SS
       const formatTime = (seconds) => {
         if (seconds === null || seconds < 0) return '00:00';
@@ -584,16 +619,18 @@ Document content: ${doc.content.substring(0, 5000)}`;
     
     let correct = 0;
     quiz.questions.forEach(q => {
-      if (quizAnswers[q.id] === q.correct) correct++;
+      // For true/false, quizAnswers stores boolean but q.correct can be string "true" or boolean.
+      const isCorrect = String(quizAnswers[q.id]).toLowerCase() === String(q.correct).toLowerCase();
+      if (isCorrect) {
+          correct++;
+      } else if (q.type === 'multiple-choice' && quizAnswers[q.id] === q.correct) {
+          correct++;
+      }
     });
     
-    setQuizResults({ 
-      correct, 
-      total: quiz.questions.length, 
-      percentage: Math.round((correct / quiz.questions.length) * 100) 
-    });
-    
-    showToast(`Quiz submitted! You scored ${Math.round((correct / quiz.questions.length) * 100)}%`, 'success');
+    const percentage = Math.round((correct / quiz.questions.length) * 100);
+    setQuizResults({ correct, total: quiz.questions.length, percentage });
+    showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
   };
 
   /**
@@ -617,6 +654,44 @@ Document content: ${doc.content.substring(0, 5000)}`;
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* ============================================ */}
+      {/* MODALS & OVERLAYS */}
+      {/* ============================================ */}
+
+      {/* Floating Timer Widget */}
+      {quiz?.config.isTimed && quizResults === null && timeLeft !== null && (
+        <div className={`fixed bottom-4 right-4 bg-white rounded-lg shadow-xl p-3 z-50 border-2 w-40 text-center transition-colors
+          ${timeLeft < 60 ? 'border-red-500' : timeLeft < 120 ? 'border-yellow-500' : 'border-green-500'}`}
+        >
+          <div className="flex items-center justify-center text-sm font-medium text-gray-600 mb-1">
+            <Clock className="h-4 w-4 mr-2" />
+            Time Left
+          </div>
+          <span className={`font-mono text-3xl font-bold tracking-widest ${
+            timeLeft < 60 ? 'text-red-600 animate-pulse' : timeLeft < 120 ? 'text-yellow-600' : 'text-green-600'
+          }`}>
+            {formatTime(timeLeft)}
+          </span>
+        </div>
+      )}
+
+      {/* Quiz Generation Progress Modal */}
+      {quizGenerationProgress && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6 text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Generating Your Quiz...</h3>
+                  <p className="text-sm text-gray-600 mb-4">{quizGenerationProgress.message}</p>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div 
+                          className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" 
+                          style={{ width: `${(quizGenerationProgress.current / quizGenerationProgress.total) * 100}%` }}
+                      ></div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Error Notification - Fixed position, mobile responsive */}
       {error && (
         <div className="fixed top-4 right-4 left-4 md:left-auto md:w-96 bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg z-50">
@@ -752,6 +827,8 @@ Document content: ${doc.content.substring(0, 5000)}`;
                       <option value={20}>20 Questions</option>
                       <option value={25}>25 Questions</option>
                       <option value={30}>30 Questions</option>
+                      <option value={40}>40 Questions</option>
+                      <option value={50}>50 Questions</option>
                   </select>
                 </div>
                 
@@ -1226,7 +1303,9 @@ Document content: ${doc.content.substring(0, 5000)}`;
                                 <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                               ) : (
                                 <div className="prose prose-sm max-w-none text-gray-900">
-                                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                    {msg.content}
+                                  </ReactMarkdown>
                                 </div>
                               )}
                               <div className="flex items-center justify-between mt-1">
@@ -1341,12 +1420,6 @@ Document content: ${doc.content.substring(0, 5000)}`;
                         {quiz.questions.length} questions • {quiz.config.isTimed ? `${quiz.config.timeLimit / 60} minute timer` : 'No timer'}
                       </p>
                     </div>
-                    {/* Timer Display */}
-                    {quiz.config.isTimed && quizResults === null && timeLeft !== null && (
-                      <div className="bg-indigo-100 border border-indigo-200 text-indigo-800 rounded-lg px-4 py-2 text-center">
-                        <span className="font-mono text-2xl font-bold tracking-widest">{formatTime(timeLeft)}</span>
-                      </div>
-                    )}
                     {quizResults && (
                       <div className="text-center sm:text-right">
                         <div className="text-2xl sm:text-3xl font-bold text-indigo-600">{quizResults.percentage}%</div>
@@ -1359,9 +1432,11 @@ Document content: ${doc.content.substring(0, 5000)}`;
                   <div className="space-y-6">
                     {quiz.questions.map((q, index) => (
                       <div key={q.id} className="border border-gray-200 rounded-lg p-4 sm:p-6">
-                        <h3 className="text-sm sm:text-lg font-medium text-gray-900 mb-4">
-                          {index + 1}. {q.question}
-                        </h3>
+                        <div className="text-sm sm:text-lg font-medium text-gray-900 mb-4 prose prose-sm max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                {`${index + 1}. ${q.question}`}
+                            </ReactMarkdown>
+                        </div>
                         
                         {/* Multiple choice questions */}
                         {q.type === 'multiple-choice' && (
@@ -1375,7 +1450,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                                   checked={quizAnswers[q.id] === optionIndex} 
                                   onChange={() => handleQuizAnswer(q.id, optionIndex)} 
                                   className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 mt-1" 
-                                  disabled={quizResults} 
+                                  disabled={!!quizResults} 
                                 />
                                 <span className={`flex-1 text-xs sm:text-base ${
                                   quizResults && optionIndex === q.correct 
@@ -1402,21 +1477,21 @@ Document content: ${doc.content.substring(0, 5000)}`;
                                 <input 
                                   type="radio" 
                                   name={`question-${q.id}`} 
-                                  value={value.toString()} 
-                                  checked={quizAnswers[q.id] === value} 
+                                  value={String(value)}
+                                  checked={String(quizAnswers[q.id]) === String(value)} 
                                   onChange={() => handleQuizAnswer(q.id, value)} 
                                   className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300" 
-                                  disabled={quizResults} 
+                                  disabled={!!quizResults} 
                                 />
                                 <span className={`text-xs sm:text-base ${
-                                  quizResults && value === q.correct 
+                                  quizResults && String(value) === String(q.correct)
                                     ? 'text-green-600 font-medium' 
-                                    : quizResults && quizAnswers[q.id] === value && value !== q.correct 
+                                    : quizResults && String(quizAnswers[q.id]) === String(value) && String(value) !== String(q.correct)
                                     ? 'text-red-600' 
                                     : 'text-gray-700'
                                 }`}>
                                   {value ? 'True' : 'False'}
-                                  {quizResults && value === q.correct && (
+                                  {quizResults && String(value) === String(q.correct) && (
                                     <Check className="h-4 sm:h-5 w-4 sm:w-5 inline ml-2 text-green-600" />
                                   )}
                                 </span>
@@ -1430,9 +1505,11 @@ Document content: ${doc.content.substring(0, 5000)}`;
                           <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
                             <div className="flex items-start">
                               <Brain className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
-                              <div>
+                              <div className="prose prose-sm max-w-none">
                                 <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">Explanation:</p>
-                                <p className="text-xs sm:text-sm text-blue-800">{q.explanation}</p>
+                                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                  {q.explanation}
+                                </ReactMarkdown>
                               </div>
                             </div>
                           </div>
@@ -1618,7 +1695,7 @@ Document content: ${doc.content.substring(0, 5000)}`;
                   </div>
                   <div className="bg-white rounded-lg p-4 sm:p-6 shadow">
                     <h4 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Is my data secure?</h4>
-                    <p className="text-xs sm:text-sm text-gray-600">Absolutely! All your documents and data are stored securely and never shared with third parties.</p>
+                    <p className="text-xs sm:text-sm text-gray-600">Absolutely! All your documents and data are stored securely on your device using your browser's local storage and are never shared with third parties.</p>
                   </div>
                 </div>
               </div>
