@@ -494,7 +494,7 @@ const EasylearnAI = () => {
     setError(null);
     setShowQuizConfig(false);
     
-    const BATCH_SIZE = 25; // Generate 25 questions per API call
+    const BATCH_SIZE = 5; // Generate 5 questions per API call
     const numBatches = Math.ceil(config.questionCount / BATCH_SIZE);
     let allQuestions = [];
 
