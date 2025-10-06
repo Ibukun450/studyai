@@ -509,25 +509,36 @@ const EasylearnAI = () => {
     setError(null);
     setShowQuizConfig(false);
     
-    const BATCH_SIZE = 5; // Generate 5 questions per API call
-    const numBatches = Math.ceil(config.questionCount / BATCH_SIZE);
-    let allQuestions = [];
+    const BATCH_SIZE = 10;
+const numBatches = Math.ceil(config.questionCount / BATCH_SIZE);
+let allQuestions = [];
 
-    try {
-      for (let i = 0; i < numBatches; i++) {
-        const questionsInBatch = (i === numBatches - 1) 
-          ? config.questionCount - (i * BATCH_SIZE) 
-          : BATCH_SIZE;
+// NEW: Split document into different parts
+const docLength = doc.content.length;
+const chunkSize = Math.floor(docLength / numBatches);
 
-        setQuizGenerationProgress({
-            stage: 'batch',
-            message: `Generating questions... (Batch ${i + 1} of ${numBatches})`,
-            current: i + 1,
-            total: numBatches,
-        });
+try {
+  for (let i = 0; i < numBatches; i++) {
+    const questionsInBatch = (i === numBatches - 1) 
+      ? config.questionCount - (i * BATCH_SIZE) 
+      : BATCH_SIZE;
 
-        const questionTypeText = config.questionTypes.join(' and ');
-        const prompt = `Based on the document content, generate ${questionsInBatch} quiz questions. Include ${questionTypeText} questions.
+    // NEW: Get DIFFERENT part of document for each batch
+    const startIdx = i * chunkSize;
+    const endIdx = (i === numBatches - 1) ? docLength : (i + 1) * chunkSize;
+    const contentChunk = doc.content.substring(startIdx, endIdx);
+
+    setQuizGenerationProgress({
+      stage: 'batch',
+      message: `Generating questions... (Batch ${i + 1} of ${numBatches})`,
+      current: i + 1,
+      total: numBatches,
+    });
+
+    const questionTypeText = config.questionTypes.join(' and ');
+    
+    // CHANGED: Use contentChunk instead of always using the same part
+    const prompt = `Based on the document content, generate ${questionsInBatch} quiz questions. Include ${questionTypeText} questions.
 For any questions or explanations involving mathematical formulas, USE LATEX SYNTAX. Use $...$ for inline math and $$...$$ for block-level equations.
 
 IMPORTANT: For EACH question, you MUST include an "explanation" field that:
@@ -544,7 +555,7 @@ Format your response as a valid JSON array of objects with this EXACT structure:
   "explanation": "Detailed explanation here referencing the document content, explaining why this answer is correct, and using LaTeX for math like $E = mc^2$."
 }]
 
-Document content: ${doc.content.substring(0, 15000)}`;
+Document content: ${contentChunk.substring(0, 8000)}`;
       
         const response = await fetch(`${API_BASE_URL}/ai`, {
             method: 'POST',
@@ -629,25 +640,35 @@ Document content: ${doc.content.substring(0, 15000)}`;
   /**
    * Submit quiz and calculate results
    */
-  const submitQuiz = () => {
-    if (!quiz) return;
-    
-    let correct = 0;
-    quiz.questions.forEach(q => {
-      // For true/false, quizAnswers stores boolean but q.correct can be string "true" or boolean.
-      const isCorrect = String(quizAnswers[q.id]).toLowerCase() === String(q.correct).toLowerCase();
-      if (isCorrect) {
-          correct++;
-      } else if (q.type === 'multiple-choice' && quizAnswers[q.id] === q.correct) {
-          correct++;
+ const submitQuiz = () => {
+  if (!quiz) return;
+  
+  let correct = 0;
+  quiz.questions.forEach(q => {
+    if (q.type === 'true-false') {
+      // For true/false: compare as booleans
+      const userAnswer = quizAnswers[q.id];
+      const correctAnswer = q.correct;
+      
+      // Convert both to boolean for comparison
+      const userBool = userAnswer === true || userAnswer === 'true' || userAnswer === 'True';
+      const correctBool = correctAnswer === true || correctAnswer === 'true' || correctAnswer === 'True';
+      
+      if (userBool === correctBool) {
+        correct++;
       }
-    });
-    
-    const percentage = Math.round((correct / quiz.questions.length) * 100);
-    setQuizResults({ correct, total: quiz.questions.length, percentage });
-    showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
-  };
-
+    } else if (q.type === 'multiple-choice') {
+      // For multiple choice: compare as numbers
+      if (quizAnswers[q.id] === q.correct) {
+        correct++;
+      }
+    }
+  });
+  
+  const percentage = Math.round((correct / quiz.questions.length) * 100);
+  setQuizResults({ correct, total: quiz.questions.length, percentage });
+  showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
+};
   /**
    * Delete document from library
    * @param {string} docId - Document ID to delete
@@ -1460,7 +1481,7 @@ Document content: ${doc.content.substring(0, 15000)}`;
                             </ReactMarkdown>
                         </div>
                         
-                        {/* Multiple choice questions */}
+                       {/* Multiple choice questions */}
                         {q.type === 'multiple-choice' && (
                           <div className="space-y-3">
                             {q.options.map((option, optionIndex) => (
@@ -1481,7 +1502,10 @@ Document content: ${doc.content.substring(0, 15000)}`;
                                     ? 'text-red-600' 
                                     : 'text-gray-700'
                                 }`}>
-                                  {option}
+                                  {/* Render options with LaTeX support */}
+                                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                                    {option}
+                                  </ReactMarkdown>
                                   {quizResults && optionIndex === q.correct && (
                                     <Check className="h-4 sm:h-5 w-4 sm:w-5 inline ml-2 text-green-600" />
                                   )}
@@ -1490,7 +1514,7 @@ Document content: ${doc.content.substring(0, 15000)}`;
                             ))}
                           </div>
                         )}
-                        
+
                         {/* True/false questions */}
                         {q.type === 'true-false' && (
                           <div className="space-y-3">
