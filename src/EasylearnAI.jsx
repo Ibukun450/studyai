@@ -313,28 +313,43 @@ const EasylearnAI = () => {
    * @param {File} file - PDF file to process
    * @returns {Promise<string>} - Extracted text content
    */
-  const extractTextFromPDF = async (file) => {
-    try {
-      setError(null);
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ 
-        data: arrayBuffer, 
-        isEvalSupported: false, 
-        useSystemFonts: true 
-      }).promise;
+ const extractTextFromPDF = async (file) => {
+  try {
+    setError(null);
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ 
+      data: arrayBuffer, 
+      isEvalSupported: false, 
+      useSystemFonts: true 
+    }).promise;
+    
+    let fullText = "";
+    const maxPages = Math.min(pdf.numPages, 50);
+    
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
       
-      let fullText = "";
-      const maxPages = Math.min(pdf.numPages, 50); // Limit to 50 pages for performance
+      // Better text extraction with spacing
+      let lastY = null;
+      const pageText = textContent.items.map((item) => {
+        const currentY = item.transform[5];
+        const text = item.str;
+        
+        // Add line break if Y position changed significantly (new line)
+        if (lastY !== null && Math.abs(currentY - lastY) > 5) {
+          lastY = currentY;
+          return '\n' + text;
+        }
+        lastY = currentY;
+        return text;
+      }).join(' ');
       
-      for (let i = 1; i <= maxPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item) => item.str).join(" ");
-        fullText += pageText + "\n\n";
-      }
-      
-      return fullText;
-    } catch (error) {
+      fullText += pageText + "\n\n";
+    }
+    
+    return fullText;
+  } catch (error) {
       console.error('PDF extraction error:', error);
       let errorMessage = 'Failed to extract text from PDF. Please try again.';
       
@@ -917,13 +932,13 @@ Document content: ${doc.content.substring(0, 15000)}`;
                   <span className="ml-2">•</span>
                   <span className="ml-2">{usageStats.quizzes}/{FREE_LIMITS.quizzes} quizzes</span>
                 </div>
-                <button 
+                {/* <button 
                   onClick={clearAllData} 
                   className="text-gray-400 hover:text-red-500 transition-colors" 
                   title="Clear all data"
                 >
                   <RefreshCw className="h-4 w-4" />
-                </button>
+                </button> */}
               </div>
             )}
             
@@ -1202,29 +1217,36 @@ Document content: ${doc.content.substring(0, 15000)}`;
                       </div>
                     </div>
                     
-                  {/* Document content preview */}
-                      {/* Document content preview */}
-<div className="w-full h-full text-center p-4">
-    <p className="text-sm text-gray-600 mb-4 lg:hidden">
-      PDF preview may not load on mobile. Please use the button below.
-    </p>
-    {/* Link to open in new tab (good for mobile) */}
-    <a
-      href={selectedDoc.pdfUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="lg:hidden inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm transition-colors"
-    >
-      <FileText className="h-4 w-4 mr-2" />
-      Open PDF in New Tab
-    </a>
-    {/* Iframe for desktop */}
-    <iframe
-      src={selectedDoc.pdfUrl}
-      className="hidden lg:block w-full h-[calc(100vh-200px)] border-0 rounded-lg"
-      title="PDF Preview"
-    />
-</div>
+{/* Document content preview */}
+                        <div className="w-full h-[calc(100vh-250px)] overflow-y-auto">
+                          {/* Mobile: Show formatted extracted text */}
+                          <div className="lg:hidden p-4">
+                            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3 mb-4">
+                              <p className="text-xs text-amber-800 flex items-center">
+                                <AlertCircle className="h-4 w-4 mr-2" />
+                                Showing text extracted from PDF (formatted for readability)
+                              </p>
+                            </div>
+                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                              <div className="prose prose-sm max-w-none">
+                                {selectedDoc.content.split('\n\n').map((paragraph, idx) => (
+                                  paragraph.trim() && (
+                                    <p key={idx} className="mb-3 text-gray-800 leading-relaxed">
+                                      {paragraph.trim()}
+                                    </p>
+                                  )
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Desktop: Show PDF iframe */}
+                          <iframe
+                            src={selectedDoc.pdfUrl}
+                            className="hidden lg:block w-full h-full border border-gray-300 rounded-lg"
+                            title="PDF Preview"
+                          />
+                        </div>
                   </div>
                 )}
               </div>
