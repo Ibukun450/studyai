@@ -68,7 +68,7 @@ const EasylearnAI = () => {
   
   // Constants
   const API_BASE_URL = "/.netlify/functions";
-  const FREE_LIMITS = { uploads: 1, questions: 3, quizzes: 1 };
+  const FREE_LIMITS = { uploads: 1, questions: 3 };
 
   // ============================================
   // EFFECTS & LIFECYCLE
@@ -276,12 +276,7 @@ const EasylearnAI = () => {
   /**
    * Clear chat history for current document
    */
-  const clearChat = () => {
-    if (window.confirm('Clear all chat messages for this document?')) {
-      setChatMessages([]);
-      showToast('Chat cleared!', 'info');
-    }
-  };
+  
 
   // ============================================
   // PREMIUM & ACTIVATION
@@ -499,11 +494,11 @@ const EasylearnAI = () => {
    * @param {Object} doc - Document to create quiz from
    */
   const generateQuiz = async (doc) => {
-    if (hasReachedLimit('quizzes')) {
-      setShowActivationModal(true);
-      setShowQuizConfig(false);
-      return;
-    }
+    // // if (hasReachedLimit('quizzes')) {
+    // //   setShowActivationModal(true);
+    // //   setShowQuizConfig(false);
+    // //   return;
+    // }
     
     const config = quizConfig;
     setError(null);
@@ -913,7 +908,16 @@ Document content: ${contentChunk.substring(0, 8000)}`;
                   Cancel
                 </button>
                 <button 
-                  onClick={() => generateQuiz(selectedDocForQuiz)} 
+                  onClick={() => {
+    // New Check: Require premium for 5 or more questions
+    if (quizConfig.questionCount >= 5 && !isActivated) {
+      showToast('Upgrade to generate longer quizzes!', 'info');
+      setShowQuizConfig(false);
+      setShowActivationModal(true);
+    } else {
+      generateQuiz(selectedDocForQuiz);
+    }
+  }} 
                   disabled={loading} 
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
                 >
@@ -950,8 +954,6 @@ Document content: ${contentChunk.substring(0, 8000)}`;
                   <span className="ml-2">{usageStats.uploads}/{FREE_LIMITS.uploads} uploads</span>
                   <span className="ml-2">•</span>
                   <span className="ml-2">{usageStats.questions}/{FREE_LIMITS.questions} Q&A</span>
-                  <span className="ml-2">•</span>
-                  <span className="ml-2">{usageStats.quizzes}/{FREE_LIMITS.quizzes} quizzes</span>
                 </div>
                 {/* <button 
                   onClick={clearAllData} 
@@ -1016,7 +1018,7 @@ Document content: ${contentChunk.substring(0, 8000)}`;
                   <div className="flex justify-between items-center">
                     <div>
                       <div className="font-medium mb-1">Usage:</div>
-                      <div>{usageStats.uploads}/{FREE_LIMITS.uploads} uploads • {usageStats.questions}/{FREE_LIMITS.questions} Q&A • {usageStats.quizzes}/{FREE_LIMITS.quizzes} quizzes</div>
+                      <div>{usageStats.uploads}/{FREE_LIMITS.uploads} uploads • {usageStats.questions}/{FREE_LIMITS.questions} Q&A</div>
                     </div>
                     <button 
                       onClick={clearAllData} 
@@ -1287,14 +1289,7 @@ Document content: ${contentChunk.substring(0, 8000)}`;
                   <Brain className="h-5 w-5 text-white" />
                   <h3 className="font-semibold text-white">EasylearnAI Assistant</h3>
                 </div>
-                {chatMessages.length > 0 && (
-                  <button 
-                    onClick={clearChat} 
-                    className="text-white hover:text-indigo-100 text-xs sm:text-sm transition-colors"
-                  >
-                    Clear
-                  </button>
-                )}
+                
               </div>
 
               {/* Chat messages area */}
