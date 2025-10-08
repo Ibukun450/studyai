@@ -530,7 +530,7 @@ try {
       total: numBatches,
     });
 
-    const questionTypeText = config.questionTypes.join(' and ');
+    const questionTypeText = config.questionTypes.filter(t => t !== 'true-false').join(' and ');
     
     // CHANGED: Use contentChunk instead of always using the same part
     const prompt = `Based on the document content, generate ${questionsInBatch} quiz questions. Include ${questionTypeText} questions.
@@ -1510,36 +1510,7 @@ Document content: ${contentChunk.substring(0, 8000)}`;
                           </div>
                         )}
 
-                        {/* True/false questions */}
-                        {q.type === 'true-false' && (
-                          <div className="space-y-3">
-                            {[true, false].map((value, idx) => (
-                              <label key={idx} className="flex items-center space-x-3 cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name={`question-${q.id}`} 
-                                  value={String(value)}
-                                  checked={String(quizAnswers[q.id]) === String(value)} 
-                                  onChange={() => handleQuizAnswer(q.id, value)} 
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300" 
-                                  disabled={!!quizResults} 
-                                />
-                                <span className={`text-xs sm:text-base ${
-                                  quizResults && String(value) === String(q.correct)
-                                    ? 'text-green-600 font-medium' 
-                                    : quizResults && String(quizAnswers[q.id]) === String(value) && String(value) !== String(q.correct)
-                                    ? 'text-red-600' 
-                                    : 'text-gray-700'
-                                }`}>
-                                  {value ? 'True' : 'False'}
-                                  {quizResults && String(value) === String(q.correct) && (
-                                    <Check className="h-4 sm:h-5 w-4 sm:w-5 inline ml-2 text-green-600" />
-                                  )}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
+                       
                         
                         {/* Explanation - shown after submission */}
                         {quizResults && q.explanation && (
