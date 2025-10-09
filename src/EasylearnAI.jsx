@@ -48,9 +48,10 @@ const EasylearnAI = () => {
   const [selectedDocForQuiz, setSelectedDocForQuiz] = useState(null);
   const [quizConfig, setQuizConfig] = useState({
     questionCount: 10,
-    isTimed: false, // New: To enable/disable the timer
-    timeLimit: 300, // New: Time in seconds (e.g., 300s = 5 minutes)
-    questionTypes: ['multiple-choice', 'true-false']
+    isTimed: false,
+    timeLimit: 300, 
+    // MODIFIED: Removed 'true-false' from question types
+    questionTypes: ['multiple-choice'] 
   });
   
   // New state to manage the countdown during the quiz
@@ -505,53 +506,51 @@ const EasylearnAI = () => {
     setShowQuizConfig(false);
     
     const BATCH_SIZE = 10;
-const numBatches = Math.ceil(config.questionCount / BATCH_SIZE);
-let allQuestions = [];
-
-// NEW: Split document into different parts
-const docLength = doc.content.length;
-const chunkSize = Math.floor(docLength / numBatches);
-
-try {
-  for (let i = 0; i < numBatches; i++) {
-    const questionsInBatch = (i === numBatches - 1) 
-      ? config.questionCount - (i * BATCH_SIZE) 
-      : BATCH_SIZE;
-
-    // NEW: Get DIFFERENT part of document for each batch
-    const startIdx = i * chunkSize;
-    const endIdx = (i === numBatches - 1) ? docLength : (i + 1) * chunkSize;
-    const contentChunk = doc.content.substring(startIdx, endIdx);
-
-    setQuizGenerationProgress({
-      stage: 'batch',
-      message: `Generating questions... (Batch ${i + 1} of ${numBatches})`,
-      current: i + 1,
-      total: numBatches,
-    });
-
-    const questionTypeText = config.questionTypes.filter(t => t !== 'true-false').join(' and ');
+    const numBatches = Math.ceil(config.questionCount / BATCH_SIZE);
+    let allQuestions = [];
     
-    // CHANGED: Use contentChunk instead of always using the same part
-    const prompt = `Based on the document content, generate ${questionsInBatch} quiz questions. Include ${questionTypeText} questions.
-For any questions or explanations involving mathematical formulas, USE LATEX SYNTAX. Use $...$ for inline math and $$...$$ for block-level equations.
-
-IMPORTANT: For EACH question, you MUST include an "explanation" field that:
-1. Explains WHY the correct answer is right
-2. References specific information from the document
-3. Provides context to help the student learn
-
-Format your response as a valid JSON array of objects with this EXACT structure:
-[{
-  "question": "question text here",
-  "type": "multiple-choice",
-  "options": ["option1", "option2", "option3", "option4"],
-  "correct": 0,
-  "explanation": "Detailed explanation here referencing the document content, explaining why this answer is correct, and using LaTeX for math like $E = mc^2$."
-}]
-
-Document content: ${contentChunk.substring(0, 8000)}`;
-      
+    // NEW: Split document into different parts
+    const docLength = doc.content.length;
+    const chunkSize = Math.floor(docLength / numBatches);
+    
+    try {
+      for (let i = 0; i < numBatches; i++) {
+        const questionsInBatch = (i === numBatches - 1) 
+          ? config.questionCount - (i * BATCH_SIZE) 
+          : BATCH_SIZE;
+    
+        // NEW: Get DIFFERENT part of document for each batch
+        const startIdx = i * chunkSize;
+        const endIdx = (i === numBatches - 1) ? docLength : (i + 1) * chunkSize;
+        const contentChunk = doc.content.substring(startIdx, endIdx);
+    
+        setQuizGenerationProgress({
+          stage: 'batch',
+          message: `Generating questions... (Batch ${i + 1} of ${numBatches})`,
+          current: i + 1,
+          total: numBatches,
+        });
+        
+        // MODIFIED: Updated prompt to only ask for multiple-choice questions
+        const prompt = `Based on the document content, generate ${questionsInBatch} quiz questions. All questions must be of the "multiple-choice" type.
+    For any questions or explanations involving mathematical formulas, USE LATEX SYNTAX. Use $...$ for inline math and $$...$$ for block-level equations.
+    
+    IMPORTANT: For EACH question, you MUST include an "explanation" field that:
+    1. Explains WHY the correct answer is right
+    2. References specific information from the document
+    3. Provides context to help the student learn
+    
+    Format your response as a valid JSON array of objects with this EXACT structure:
+    [{
+      "question": "question text here",
+      "type": "multiple-choice",
+      "options": ["option1", "option2", "option3", "option4"],
+      "correct": 0,
+      "explanation": "Detailed explanation here referencing the document content, explaining why this answer is correct, and using LaTeX for math like $E = mc^2$."
+    }]
+    
+    Document content: ${contentChunk.substring(0, 8000)}`;
+          
         const response = await fetch(`${API_BASE_URL}/ai`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -635,35 +634,25 @@ Document content: ${contentChunk.substring(0, 8000)}`;
   /**
    * Submit quiz and calculate results
    */
- const submitQuiz = () => {
-  if (!quiz) return;
-  
-  let correct = 0;
-  quiz.questions.forEach(q => {
-    if (q.type === 'true-false') {
-      // For true/false: compare as booleans
-      const userAnswer = quizAnswers[q.id];
-      const correctAnswer = q.correct;
-      
-      // Convert both to boolean for comparison
-      const userBool = userAnswer === true || userAnswer === 'true' || userAnswer === 'True';
-      const correctBool = correctAnswer === true || correctAnswer === 'true' || correctAnswer === 'True';
-      
-      if (userBool === correctBool) {
-        correct++;
-      }
-    } else if (q.type === 'multiple-choice') {
-      // For multiple choice: compare as numbers
+  // MODIFIED: Simplified the scoring logic.
+  const submitQuiz = () => {
+    if (!quiz) return;
+    
+    let correct = 0;
+    quiz.questions.forEach(q => {
+      // This single check handles multiple-choice questions.
+      // If a question is unanswered, quizAnswers[q.id] will be undefined,
+      // and the comparison will be false, correctly marking it as wrong.
       if (quizAnswers[q.id] === q.correct) {
         correct++;
       }
-    }
-  });
-  
-  const percentage = Math.round((correct / quiz.questions.length) * 100);
-  setQuizResults({ correct, total: quiz.questions.length, percentage });
-  showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
-};
+    });
+    
+    const percentage = Math.round((correct / quiz.questions.length) * 100);
+    setQuizResults({ correct, total: quiz.questions.length, percentage });
+    showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
+  };
+
   /**
    * Delete document from library
    * @param {string} docId - Document ID to delete
