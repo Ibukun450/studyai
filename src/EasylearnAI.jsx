@@ -67,6 +67,8 @@ const EasylearnAI = () => {
   const [usageStats, setUsageStats] = useState({ uploads: 0, questions: 0, quizzes: 0 });
   const [showContactModal, setShowContactModal] = useState(false);
   
+  const [chatHistory, setChatHistory] = useState([]);
+  const [quizHistory, setQuizHistory] = useState([]);
   // Constants
   const API_BASE_URL = "/.netlify/functions";
   const FREE_LIMITS = { uploads: 1, questions: 3 };
@@ -158,6 +160,15 @@ const EasylearnAI = () => {
     localStorage.setItem('easylearnai_chat_messages', JSON.stringify(chatMessages));
   }, [chatMessages]);
 
+
+  useEffect(() => {
+  const savedChats = JSON.parse(localStorage.getItem('easylearnai_chat_history') || '[]');
+  const savedQuizzes = JSON.parse(localStorage.getItem('easylearnai_quiz_history') || '[]');
+  setChatHistory(savedChats);
+  setQuizHistory(savedQuizzes);
+}, []);
+
+
   useEffect(() => {
     if (quiz) {
       localStorage.setItem('easylearnai_current_quiz', JSON.stringify(quiz));
@@ -193,10 +204,15 @@ const EasylearnAI = () => {
         setTimeLeft(prevTime => {
           if (prevTime <= 1) {
             clearInterval(timerInterval);
-            showToast("Time's up! Submitting your answers.", 'info');
-            submitQuiz(); // Auto-submit the quiz
+            setTimeout(() => {
+              showToast("Time's up! Submitting your answers.", 'info');
+              if (quiz && Object.keys(quizAnswers).length >= 0) {
+                submitQuiz();
+              }
+            }, 500);
             return 0;
           }
+
           return prevTime - 1;
         });
       }, 1000);
@@ -474,6 +490,15 @@ const EasylearnAI = () => {
       };
       setChatMessages(prev => [...prev, aiMessage]);
       setUsageStats(prev => ({ ...prev, questions: prev.questions + 1 }));
+  
+      setChatHistory(prev => {
+        const updated = [
+          ...prev,
+          { id: Date.now(), date: new Date().toLocaleString(), messages: [...chatMessages, userMessage, aiMessage] }
+        ];
+        localStorage.setItem('easylearnai_chat_history', JSON.stringify(updated));
+        return updated;
+      });
     } catch (err) {
       console.error('AI API error:', err);
       if (err.message.includes('moderation')) {
@@ -494,6 +519,18 @@ const EasylearnAI = () => {
    * Generate quiz from document content using batching for large quizzes
    * @param {Object} doc - Document to create quiz from
    */
+
+  // Fisher-Yates shuffle for fair randomization
+    const shuffleArray = (array) => {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+
   const generateQuiz = async (doc) => {
     // // if (hasReachedLimit('quizzes')) {
     // //   setShowActivationModal(true);
@@ -580,14 +617,17 @@ const EasylearnAI = () => {
       setQuizGenerationProgress({ stage: 'finalizing', message: 'Finalizing your quiz...', current: numBatches, total: numBatches });
 
       // Validate and format all questions together
-      const validQuestions = allQuestions
-        .filter(q => q.question && q.type && q.explanation)
+     // Randomize before slicing and numbering
+      const shuffled = shuffleArray(allQuestions.filter(q => q.question && q.type && q.explanation));
+
+      const validQuestions = shuffled
         .slice(0, config.questionCount)
-        .map((q, index) => ({ 
-          ...q, 
+        .map((q, index) => ({
+          ...q,
           id: index + 1,
-          explanation: q.explanation || 'No explanation provided.'
+          explanation: q.explanation || 'No explanation provided.',
         }));
+
       
       if (validQuestions.length < config.questionCount / 2) { // Check if we got a reasonable number of questions
           throw new Error('AI failed to generate a sufficient number of valid questions.');
@@ -647,7 +687,22 @@ const EasylearnAI = () => {
         correct++;
       }
     });
-    
+    setQuizHistory(prev => {
+  const updated = [
+        ...prev,
+        { 
+          id: Date.now(),
+          date: new Date().toLocaleString(),
+          title: quiz.title,
+          score: correct,
+          total: quiz.questions.length,
+          percentage
+        }
+      ];
+      localStorage.setItem('easylearnai_quiz_history', JSON.stringify(updated));
+      return updated;
+    });
+
     const percentage = Math.round((correct / quiz.questions.length) * 100);
     setQuizResults({ correct, total: quiz.questions.length, percentage });
     showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
@@ -843,12 +898,13 @@ const EasylearnAI = () => {
                   >
                       <option value={5}>5 Questions</option>
                       <option value={10}>10 Questions</option>
-                      <option value={15}>15 Questions</option>
-                      <option value={20}>20 Questions</option>
-                      <option value={25}>25 Questions</option>
-                      <option value={30}>30 Questions</option>
-                      <option value={40}>40 Questions</option>
-                      <option value={50}>50 Questions</option>
+                      <option value={15} disabled={!isActivated}>15 Questions 🔒</option>
+                      <option value={20} disabled={!isActivated}>20 Questions 🔒</option>
+                      <option value={25} disabled={!isActivated}>25 Questions 🔒</option>
+                      <option value={30} disabled={!isActivated}>30 Questions 🔒</option>
+                      <option value={40} disabled={!isActivated}>40 Questions 🔒</option>
+                      <option value={50} disabled={!isActivated}>50 Questions 🔒</option>
+
                   </select>
                 </div>
                 
@@ -879,10 +935,13 @@ const EasylearnAI = () => {
         onChange={(e) => setQuizConfig(prev => ({ ...prev, timeLimit: parseInt(e.target.value) }))} 
         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
       >
-        <option value={180}>3 Minutes</option>
-        <option value={300}>5 Minutes</option>
-        <option value={600}>10 Minutes</option>
-        <option value={900}>15 Minutes</option>
+            <option value={180}>3 Minutes</option>
+            <option value={300}>5 Minutes</option>
+            <option value={600}>10 Minutes</option>
+            <option value={900}>15 Minutes</option>
+            <option value={1200}>20 Minutes</option>
+            <option value={1800}>30 Minutes</option>
+            <option value={3600}>60 Minutes (1 Hour)</option>
       </select>
     </div>
   )}
@@ -899,13 +958,14 @@ const EasylearnAI = () => {
                 <button 
                   onClick={() => {
     // New Check: Require premium for 5 or more questions
-    if (quizConfig.questionCount >= 5 && !isActivated) {
-      showToast('Upgrade to generate longer quizzes!', 'info');
-      setShowQuizConfig(false);
-      setShowActivationModal(true);
-    } else {
-      generateQuiz(selectedDocForQuiz);
-    }
+          if (!isActivated && quizConfig.questionCount > 10) {
+          showToast('Upgrade to unlock 15–50 question quizzes!', 'info');
+          setShowQuizConfig(false);
+          setShowActivationModal(true);
+        } else {
+          generateQuiz(selectedDocForQuiz);
+        }
+
   }} 
                   disabled={loading} 
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors"
@@ -986,6 +1046,14 @@ const EasylearnAI = () => {
               >
                 <Crown className="h-4 w-4 inline mr-2" />Upgrade
               </button>
+
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors 
+                ${activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Clock className="h-4 w-4 inline mr-2" />History
+              </button>
+
             </nav>
             
             {/* Mobile menu button */}
@@ -1051,6 +1119,13 @@ const EasylearnAI = () => {
               >
                 <Crown className="h-4 w-4 inline mr-2" />Upgrade
               </button>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors 
+                ${activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Clock className="h-4 w-4 inline mr-2" />History
+              </button>
+
             </div>
           )}
         </div>
@@ -1459,11 +1534,17 @@ const EasylearnAI = () => {
                   <div className="space-y-6">
                     {quiz.questions.map((q, index) => (
                       <div key={q.id} className="border border-gray-200 rounded-lg p-4 sm:p-6">
-                        <div className="text-sm sm:text-lg font-medium text-gray-900 mb-4 prose prose-sm max-w-none">
+                        <div className="flex items-center mb-2">
+                          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 mr-2 font-semibold text-xs sm:text-sm">
+                            {index + 1}
+                          </span>
+                          <div className="text-sm sm:text-lg font-medium text-gray-900 prose prose-sm max-w-none">
                             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                                {`${index + 1}. ${q.question}`}
+                              {q.question}
                             </ReactMarkdown>
+                          </div>
                         </div>
+
                         
                        {/* Multiple choice questions */}
                         {q.type === 'multiple-choice' && (
@@ -1548,6 +1629,73 @@ const EasylearnAI = () => {
             </div>
           </div>
         )}
+
+        {activeTab === 'history' && (
+  <div className="h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-5xl mx-auto">
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">History & Analytics</h2>
+
+      {/* Quiz History */}
+      <div className="mb-10">
+        <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center">
+          <Play className="h-5 w-5 mr-2" /> Quiz History
+        </h3>
+        {quizHistory.length === 0 ? (
+          <p className="text-sm text-gray-500">No quizzes taken yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {quizHistory.map(q => (
+              <div key={q.id} className="bg-white shadow-sm border border-gray-200 rounded-lg p-4 flex justify-between items-center">
+                <div>
+                  <p className="font-medium text-gray-900">{q.title}</p>
+                  <p className="text-xs text-gray-500">{q.date}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-indigo-600">{q.percentage}%</p>
+                  <p className="text-xs text-gray-500">{q.score}/{q.total} correct</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Chat History */}
+      <div>
+        <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center">
+          <MessageCircle className="h-5 w-5 mr-2" /> Chat History
+        </h3>
+        {chatHistory.length === 0 ? (
+          <p className="text-sm text-gray-500">No chats yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {chatHistory.map(c => (
+              <div key={c.id} className="bg-white shadow-sm border border-gray-200 rounded-lg p-4 flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-800 truncate w-64">
+                    {c.messages[c.messages.length - 1]?.content?.slice(0, 50)}...
+                  </p>
+                  <p className="text-xs text-gray-500">{c.date}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setChatMessages(c.messages);
+                    setActiveTab('qa');
+                    showToast('Chat restored', 'info');
+                  }}
+                  className="text-indigo-600 text-xs font-medium hover:underline"
+                >
+                  Continue
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
 
         {/* PRICING TAB */}
         {activeTab === 'pricing' && (
