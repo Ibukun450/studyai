@@ -191,39 +191,67 @@ const EasylearnAI = () => {
 /**
    * Handles the quiz timer countdown
    */
-  useEffect(() => {
-    // Check if the quiz is active, timed, and not yet submitted
-    if (quiz?.config.isTimed && quizResults === null) {
-      // Set the initial time
-      if (timeLeft === null) {
-        setTimeLeft(quiz.config.timeLimit);
-      }
-
-      // Create an interval to tick down every second
-      const timerInterval = setInterval(() => {
-        setTimeLeft(prevTime => {
-          if (prevTime <= 1) {
-            clearInterval(timerInterval);
-            setTimeout(() => {
-              showToast("Time's up! Submitting your answers.", 'info');
-              if (quiz && Object.keys(quizAnswers).length >= 0) {
-                submitQuiz();
-              }
-            }, 500);
-            return 0;
-          }
-
-          return prevTime - 1;
-        });
-      }, 1000);
-
-      // Cleanup function to clear interval when component unmounts or dependencies change
-      return () => clearInterval(timerInterval);
-    } else {
-      // Reset timer when quiz is not active
-      setTimeLeft(null);
+ useEffect(() => {
+  if (quiz?.config.isTimed && quizResults === null) {
+    if (timeLeft === null) {
+      setTimeLeft(quiz.config.timeLimit);
     }
-  }, [quiz, quizResults]);
+
+    const timerInterval = setInterval(() => {
+      setTimeLeft(prevTime => {
+        if (prevTime <= 1) {
+          clearInterval(timerInterval);
+          setTimeout(() => {
+            showToast("Time's up! Submitting your answers.", 'info');
+            // INLINE THE SCORING LOGIC HERE
+            const currentQuiz = quiz;
+            const currentAnswers = quizAnswers;
+            if (currentQuiz) {
+              let correct = 0;
+              currentQuiz.questions.forEach(q => {
+                if (currentAnswers[q.id] === q.correct) {
+                  correct++;
+                }
+              });
+              const percentage = Math.round((correct / currentQuiz.questions.length) * 100);
+              setQuizResults({ correct, total: currentQuiz.questions.length, percentage });
+              
+              setQuizHistory(prev => {
+                const updated = [
+                  ...prev,
+                  { 
+                    id: Date.now(),
+                    date: new Date().toLocaleString(),
+                    title: currentQuiz.title,
+                    score: correct,
+                    total: currentQuiz.questions.length,
+                    percentage
+                  }
+                ];
+                localStorage.setItem('easylearnai_quiz_history', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          }, 500);
+          return 0;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  } else {
+    setTimeLeft(null);
+  }
+}, [quiz, quizResults, quizAnswers]); // ADD quizAnswers HERE
+
+
+// ADD THIS NEW USEEFFECT after the other useEffect hooks
+useEffect(() => {
+  localStorage.setItem('easylearnai_activated', isActivated ? 'true' : 'false');
+}, [isActivated]);
+
+
   // ============================================
   // UTILITY FUNCTIONS
   // ============================================
@@ -675,38 +703,37 @@ const EasylearnAI = () => {
    * Submit quiz and calculate results
    */
   // MODIFIED: Simplified the scoring logic.
-  const submitQuiz = () => {
-    if (!quiz) return;
-    
-    let correct = 0;
-    quiz.questions.forEach(q => {
-      // This single check handles multiple-choice questions.
-      // If a question is unanswered, quizAnswers[q.id] will be undefined,
-      // and the comparison will be false, correctly marking it as wrong.
-      if (quizAnswers[q.id] === q.correct) {
-        correct++;
+ const submitQuiz = () => {
+  if (!quiz) return;
+  
+  let correct = 0;
+  quiz.questions.forEach(q => {
+    if (quizAnswers[q.id] === q.correct) {
+      correct++;
+    }
+  });
+  
+  const percentage = Math.round((correct / quiz.questions.length) * 100); // MOVE THIS LINE UP
+  
+  setQuizHistory(prev => {
+    const updated = [
+      ...prev,
+      { 
+        id: Date.now(),
+        date: new Date().toLocaleString(),
+        title: quiz.title,
+        score: correct,
+        total: quiz.questions.length,
+        percentage  // NOW IT'S DEFINED
       }
-    });
-    setQuizHistory(prev => {
-  const updated = [
-        ...prev,
-        { 
-          id: Date.now(),
-          date: new Date().toLocaleString(),
-          title: quiz.title,
-          score: correct,
-          total: quiz.questions.length,
-          percentage
-        }
-      ];
-      localStorage.setItem('easylearnai_quiz_history', JSON.stringify(updated));
-      return updated;
-    });
+    ];
+    localStorage.setItem('easylearnai_quiz_history', JSON.stringify(updated));
+    return updated;
+  });
 
-    const percentage = Math.round((correct / quiz.questions.length) * 100);
-    setQuizResults({ correct, total: quiz.questions.length, percentage });
-    showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
-  };
+  setQuizResults({ correct, total: quiz.questions.length, percentage });
+  showToast(`Quiz submitted! You scored ${percentage}%`, 'success');
+};
 
   /**
    * Delete document from library
@@ -1787,13 +1814,48 @@ const EasylearnAI = () => {
                       </li>
                     </ul>
                     <button 
-                      onClick={() => setShowContactModal(true)} 
-                      className="w-full py-3 px-6 rounded-lg font-medium bg-white text-indigo-600 hover:bg-gray-100 transition-colors"
+                      onClick={() => isActivated ? null : setShowContactModal(true)} 
+                      disabled={isActivated}
+                      className={`w-full py-3 px-6 rounded-lg font-medium transition-colors ${
+                        isActivated 
+                          ? 'bg-green-100 text-green-700 cursor-not-allowed' 
+                          : 'bg-white text-indigo-600 hover:bg-gray-100'
+                      }`}
                     >
-                      Get Premium Access
+                      {isActivated ? '✓ Active Plan' : 'Get Premium Access'}
                     </button>
                   </div>
                 </div>
+
+                {/* Activation Code Section */}
+{!isActivated && (
+  <div className="bg-white rounded-xl shadow-lg p-6 sm:p-8 border-2 border-indigo-200 mb-8">
+    <div className="text-center mb-6">
+      <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-100 rounded-full mb-4">
+        <Lock className="h-6 w-6 text-indigo-600" />
+      </div>
+      <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Have an Activation Code?</h3>
+      <p className="text-sm sm:text-base text-gray-600">Enter your code below to unlock Premium features instantly</p>
+    </div>
+    
+    <div className="max-w-md mx-auto">
+      <input 
+        type="text" 
+        value={activationCode} 
+        onChange={(e) => setActivationCode(e.target.value)} 
+        placeholder="Enter activation code" 
+        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-4 text-center text-lg font-mono uppercase" 
+      />
+      
+      <button 
+        onClick={handleActivation} 
+        className="w-full px-6 py-3 text-base font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg"
+      >
+        Activate Premium
+      </button>
+    </div>
+  </div>
+)}
               </div>
               
               {/* Contact CTA section */}
