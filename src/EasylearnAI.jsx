@@ -137,9 +137,12 @@ const EasylearnAI = () => {
   /**
    * Auto-scroll chat to bottom when new messages arrive
    */
-  useEffect(() => {
+ useEffect(() => {
+  const timer = setTimeout(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+  }, 100);
+  return () => clearTimeout(timer);
+}, [chatMessages]);
 
   // Save data to localStorage whenever it changes
   useEffect(() => {
@@ -370,22 +373,67 @@ useEffect(() => {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       
-      // Better text extraction with spacing
-      let lastY = null;
-      const pageText = textContent.items.map((item) => {
-        const currentY = item.transform[5];
-        const text = item.str;
-        
-        // Add line break if Y position changed significantly (new line)
-        if (lastY !== null && Math.abs(currentY - lastY) > 5) {
-          lastY = currentY;
-          return '\n' + text;
-        }
-        lastY = currentY;
-        return text;
-      }).join(' ');
-      
-      fullText += pageText + "\n\n";
+      // // Better text extraction with spacing
+      // let lastY = null;
+      // Group text items by line
+const lines = [];
+let currentLine = { y: null, items: [] };
+
+textContent.items.forEach((item) => {
+  const y = item.transform[5];
+  const height = item.height;
+  const text = item.str.trim();
+  
+  if (!text) return;
+  
+  // New line detected (Y position changed significantly)
+  if (currentLine.y === null || Math.abs(y - currentLine.y) > height * 0.3) {
+    if (currentLine.items.length > 0) {
+      lines.push(currentLine);
+    }
+    currentLine = { y, items: [item] };
+  } else {
+    currentLine.items.push(item);
+  }
+});
+
+// Push the last collected line (if any)
+if (currentLine.items.length > 0) {
+  lines.push(currentLine);
+}
+
+// Convert grouped line items into plain text lines for easier processing
+const pageLines = lines.map(line => line.items.map(it => (it.str || '').trim()).filter(Boolean).join(' '));
+
+// Detect paragraphs (lines with significant Y gaps)
+let paragraphs = [];
+let currentParagraph = [];
+
+for (let j = 0; j < lines.length; j++) {
+  const lineText = pageLines[j];
+  if (!lineText) continue;
+  
+  currentParagraph.push(lineText);
+  
+  // Check if next line is a new paragraph (large Y gap)
+  if (j < lines.length - 1) {
+    const currentY = lines[j].y;
+    const nextY = lines[j + 1].y;
+    const avgHeight = lines[j].items[0]?.height || 12;
+    
+    if (Math.abs(nextY - currentY) > avgHeight * 1.5) {
+      paragraphs.push(currentParagraph.join(' '));
+      currentParagraph = [];
+    }
+  }
+}
+
+// If any remaining paragraph lines exist, add them
+if (currentParagraph.length > 0) {
+  paragraphs.push(currentParagraph.join(' '));
+}
+
+fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
     }
     
     return fullText;
@@ -601,9 +649,10 @@ useEffect(() => {
     For any questions or explanations involving mathematical formulas, USE LATEX SYNTAX. Use $...$ for inline math and $$...$$ for block-level equations.
     
     IMPORTANT: For EACH question, you MUST include an "explanation" field that:
-    1. Explains WHY the correct answer is right
-    2. References specific information from the document
-    3. Provides context to help the student learn
+1. First, clearly state the CORRECT ANSWER in plain language
+2. Then explain WHY it is correct with specific references to the document
+3. Use LaTeX ONLY for mathematical equations - keep the rest as plain text
+4. Format like this: "The correct answer is [answer]. This is because [explanation]. The formula $$E = mc^2$$ shows that.
     
     Format your response as a valid JSON array of objects with this EXACT structure:
     [{
@@ -1614,8 +1663,8 @@ useEffect(() => {
                           <div className="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
                             <div className="flex items-start">
                               <Brain className="h-5 w-5 text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
-                              <div className="prose prose-sm max-w-none">
-                                <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">Explanation:</p>
+                             <div className="prose prose-sm max-w-none text-gray-800 [&_p]:mb-2 [&_.math-display]:my-3 [&_.math-display]:p-2 [&_.math-display]:bg-white [&_.math-display]:rounded [&_.math-display]:border [&_.math-display]:border-blue-200">
+                               <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">Explanation:</p>
                                 <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                                   {q.explanation}
                                 </ReactMarkdown>
