@@ -1470,7 +1470,7 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
                 ${activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
                 <Clock className="h-4 w-4 inline mr-2" />History
               </button>
-              {isAdminAuthenticated && (
+              {(isAdminAuthenticated || showAdminPanel) && (
   <button 
     onClick={() => setActiveTab('admin')} 
     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'admin' ? 'bg-red-100 text-red-700' : 'text-gray-500 hover:text-gray-700'}`}
@@ -1502,13 +1502,7 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
                       <div className="font-medium mb-1">Usage:</div>
                       <div>{usageStats.uploads}/{FREE_LIMITS.uploads} uploads • {usageStats.questions}/{FREE_LIMITS.questions} Q&A</div>
                     </div>
-                    <button 
-                      onClick={clearAllData} 
-                      className="text-gray-400 hover:text-red-500 ml-2 transition-colors" 
-                      title="Clear all data"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
+                    
                   </div>
                 </div>
               )}
@@ -1550,7 +1544,7 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
                 ${activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
                 <Clock className="h-4 w-4 inline mr-2" />History
               </button>
-{isAdminAuthenticated && (
+{(isAdminAuthenticated || showAdminPanel) && (
   <button 
     onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }} 
     className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-red-100 text-red-700' : 'text-gray-500'}`}
