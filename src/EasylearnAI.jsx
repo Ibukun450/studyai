@@ -73,6 +73,17 @@ const EasylearnAI = () => {
   const API_BASE_URL = "/.netlify/functions";
   const FREE_LIMITS = { uploads: 1, questions: 3 };
 
+  // Admin panel state
+const [showAdminPanel, setShowAdminPanel] = useState(false);
+const [adminKey, setAdminKey] = useState('');
+const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+const [generatedCodes, setGeneratedCodes] = useState([]);
+const [codeCount, setCodeCount] = useState(1);
+const [generatingCodes, setGeneratingCodes] = useState(false);
+const [adminStats, setAdminStats] = useState(null);
+
+// IMPORTANT: Change this to your own secret!
+const ADMIN_SECRET = 'ayoola@2009';
   // ============================================
   // EFFECTS & LIFECYCLE
   // ============================================
@@ -116,7 +127,8 @@ const EasylearnAI = () => {
     };
     
     const savedStats = safeLocalStorage.getItem('easylearnai_usage');
-    const savedActivation = safeLocalStorage.getItem('easylearnai_activated');
+  const savedActivation = safeLocalStorage.getItem('easylearnai_activated');
+
     const savedDocuments = safeLocalStorage.getItem('easylearnai_documents');
     const savedSelectedDoc = safeLocalStorage.getItem('easylearnai_selected_doc');
     const savedQuiz = safeLocalStorage.getItem('easylearnai_current_quiz');
@@ -125,13 +137,15 @@ const EasylearnAI = () => {
     const savedChatMessages = safeLocalStorage.getItem('easylearnai_chat_messages');
     
     if (savedStats) setUsageStats(JSON.parse(savedStats));
-    if (savedActivation === 'true') setIsActivated(true);
+  if (savedActivation === 'true') setIsActivated(true); // Keep this line
     if (savedDocuments) setDocuments(JSON.parse(savedDocuments));
     if (savedSelectedDoc) setSelectedDoc(JSON.parse(savedSelectedDoc));
     if (savedQuiz) setQuiz(JSON.parse(savedQuiz));
     if (savedQuizAnswers) setQuizAnswers(JSON.parse(savedQuizAnswers));
     if (savedQuizResults) setQuizResults(JSON.parse(savedQuizResults));
     if (savedChatMessages) setChatMessages(JSON.parse(savedChatMessages));
+
+    verifyActivation();
   }, []);
 
   /**
@@ -191,6 +205,18 @@ const EasylearnAI = () => {
       localStorage.removeItem('easylearnai_quiz_results');
     }
   }, [quizResults]);
+
+         // 1. Copy all functions from the artifact
+
+// 2. Replace your handleActivation function
+
+// 3. Add to useEffect:
+useEffect(() => {
+  verifyActivation();
+}, []);
+
+// 4. Add admin panel as hidden tab
+// (Triple-click logo to reveal it)
 /**
    * Handles the quiz timer countdown
    */
@@ -329,24 +355,335 @@ useEffect(() => {
   // ============================================
   // PREMIUM & ACTIVATION
   // ============================================
-  
+  /**
+ * Generate a device fingerprint for activation binding
+ */
+const getDeviceFingerprint = () => {
+  const data = {
+    userAgent: navigator.userAgent,
+    screenResolution: `${screen.width}x${screen.height}`,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: navigator.language,
+    platform: navigator.platform,
+  };
+  return btoa(JSON.stringify(data));
+};
   /**
    * Validate and activate premium features
    */
-  const handleActivation = () => {
-    const validCodes = ['EASYLEARN2025', 'PREMIUM123', 'UNLOCKNOW'];
-    if (validCodes.includes(activationCode.toUpperCase())) {
-      setIsActivated(true);
-      localStorage.setItem('easylearnai_activated', 'true');
-      setShowActivationModal(false);
-      setActivationCode('');
-      setError(null);
-      showToast('Activation successful! You now have unlimited access.', 'success');
-    } else {
-      setError('Invalid activation code. Please contact support.');
+  /**
+ * Validate and activate premium features with storage
+ */
+const handleActivation = async () => {
+  if (!activationCode.trim()) {
+    setError('Please enter an activation code');
+    return;
+  }
+  
+  setLoading(true);
+  setError(null);
+  
+  try {
+    const code = activationCode.toUpperCase().trim();
+    const deviceFingerprint = getDeviceFingerprint();
+    
+    // Try to get the code from shared storage
+    const result = await window.storage.get(`activation:${code}`, true);
+    
+    if (!result || !result.value) {
+      throw new Error('Invalid activation code. Please check and try again.');
     }
-  };
+    
+    const codeData = JSON.parse(result.value);
+    
+    // Check if expired
+    if (new Date(codeData.expiresAt) < new Date()) {
+      throw new Error('This activation code has expired. Please contact support.');
+    }
+    
+    // Check if already used
+    if (codeData.used) {
+      // If used by same device, allow (re-activation)
+      if (codeData.deviceId === deviceFingerprint) {
+        // Store locally
+        localStorage.setItem('easylearnai_activated', 'true');
+        localStorage.setItem('easylearnai_activation_code', code);
+        localStorage.setItem('easylearnai_device_fingerprint', deviceFingerprint);
+        
+        setIsActivated(true);
+        setShowActivationModal(false);
+        setActivationCode('');
+        setError(null);
+        showToast('Welcome back! Premium features restored.', 'success');
+        return;
+      }
+      
+      // Used by different device
+      throw new Error('This code has already been activated on another device. Each code works on one device only.');
+    }
+    
+    // Mark code as used and bind to device
+    codeData.used = true;
+    codeData.deviceId = deviceFingerprint;
+    codeData.activatedAt = new Date().toISOString();
+    
+    // Update in shared storage
+    await window.storage.set(`activation:${code}`, JSON.stringify(codeData), true);
+    
+    // Log activation
+    await window.storage.set(
+      `activation-log:${Date.now()}`,
+      JSON.stringify({
+        code: code,
+        deviceId: deviceFingerprint,
+        action: 'activated',
+        timestamp: new Date().toISOString()
+      }),
+      true
+    );
+    
+    // Store locally
+    localStorage.setItem('easylearnai_activated', 'true');
+    localStorage.setItem('easylearnai_activation_code', code);
+    localStorage.setItem('easylearnai_device_fingerprint', deviceFingerprint);
+    localStorage.setItem('easylearnai_activated_at', codeData.activatedAt);
+    
+    setIsActivated(true);
+    setShowActivationModal(false);
+    setActivationCode('');
+    setError(null);
+    showToast('Activation successful! Premium features unlocked.', 'success');
+    
+  } catch (error) {
+    console.error('Activation error:', error);
+    setError(error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
+  /**
+ * Verify activation on app load
+ */
+const verifyActivation = async () => {
+  const savedActivation = localStorage.getItem('easylearnai_activated');
+  const savedCode = localStorage.getItem('easylearnai_activation_code');
+  const savedFingerprint = localStorage.getItem('easylearnai_device_fingerprint');
+  
+  if (savedActivation !== 'true' || !savedCode) {
+    setIsActivated(false);
+    return;
+  }
+  
+  try {
+    const currentFingerprint = getDeviceFingerprint();
+    
+    // Check if device changed
+    if (savedFingerprint !== currentFingerprint) {
+      console.warn('Device fingerprint mismatch');
+      // Deactivate
+      localStorage.removeItem('easylearnai_activated');
+      localStorage.removeItem('easylearnai_activation_code');
+      localStorage.removeItem('easylearnai_device_fingerprint');
+      setIsActivated(false);
+      showToast('Device changed. Please reactivate.', 'error');
+      return;
+    }
+    
+    // Verify with shared storage
+    const result = await window.storage.get(`activation:${savedCode}`, true);
+    
+    if (!result || !result.value) {
+      localStorage.removeItem('easylearnai_activated');
+      setIsActivated(false);
+      return;
+    }
+    
+    const codeData = JSON.parse(result.value);
+    
+    // Check if expired
+    if (new Date(codeData.expiresAt) < new Date()) {
+      localStorage.removeItem('easylearnai_activated');
+      setIsActivated(false);
+      showToast('Activation expired. Please renew.', 'error');
+      return;
+    }
+    
+    // Check if still bound to this device
+    if (codeData.deviceId !== currentFingerprint) {
+      localStorage.removeItem('easylearnai_activated');
+      setIsActivated(false);
+      return;
+    }
+    
+    // All checks passed
+    setIsActivated(true);
+    
+  } catch (error) {
+    console.error('Verification error:', error);
+    // Don't deactivate on errors, just log
+  }
+};
+
+  /**
+ * Generate unique activation codes (Admin only)
+ */
+const generateActivationCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'EASY-';
+  
+  for (let i = 0; i < 8; i++) {
+    if (i === 4) code += '-';
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  
+  return code;
+};
+
+/**
+ * Store activation code in shared storage
+ */
+const storeActivationCode = async (code, expiryDays = 30) => {
+  try {
+    const codeData = {
+      code: code,
+      used: false,
+      deviceId: null,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
+      activatedAt: null
+    };
+    
+    const result = await window.storage.set(`activation:${code}`, JSON.stringify(codeData), true);
+    
+    if (result) {
+      return code;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to store code:', error);
+    return null;
+  }
+};
+
+  /**
+ * Authenticate admin
+ */
+const authenticateAdmin = () => {
+  if (adminKey === ADMIN_SECRET) {
+    setIsAdminAuthenticated(true);
+    showToast('Admin access granted', 'success');
+  } else {
+    setError('Invalid admin key');
+  }
+};
+
+/**
+ * Generate multiple codes
+ */
+const generateCodesHandler = async () => {
+  setGeneratingCodes(true);
+  const codes = [];
+  
+  try {
+    for (let i = 0; i < codeCount; i++) {
+      const code = generateActivationCode();
+      const stored = await storeActivationCode(code, 30);
+      if (stored) {
+        codes.push(code);
+      }
+    }
+    
+    setGeneratedCodes(codes);
+    showToast(`Generated ${codes.length} activation codes`, 'success');
+  } catch (error) {
+    showToast('Failed to generate codes', 'error');
+  } finally {
+    setGeneratingCodes(false);
+  }
+};
+
+/**
+ * Load activation statistics
+ */
+const loadAdminStats = async () => {
+  try {
+    const result = await window.storage.list('activation:', true);
+    
+    if (result && result.keys) {
+      let total = 0;
+      let used = 0;
+      let unused = 0;
+      
+      for (const key of result.keys) {
+        if (key.startsWith('activation:EASY-')) {
+          total++;
+          const codeResult = await window.storage.get(key, true);
+          if (codeResult && codeResult.value) {
+            const codeData = JSON.parse(codeResult.value);
+            if (codeData.used) {
+              used++;
+            } else {
+              unused++;
+            }
+          }
+        }
+      }
+      
+      setAdminStats({ total, used, unused });
+      showToast('Statistics loaded', 'success');
+    }
+  } catch (error) {
+    console.error('Failed to load stats:', error);
+    showToast('Failed to load statistics', 'error');
+  }
+};
+
+/**
+ * Copy single code
+ */
+const copyCode = (code) => {
+  navigator.clipboard.writeText(code);
+  showToast('Code copied!', 'success');
+};
+
+/**
+ * Copy all generated codes
+ */
+const copyAllCodes = () => {
+  const allCodes = generatedCodes.join('\n');
+  navigator.clipboard.writeText(allCodes);
+  showToast(`Copied ${generatedCodes.length} codes`, 'success');
+);
+
+  /**
+ * Handle logo clicks for admin access
+ */
+const [logoClickCount, setLogoClickCount] = useState(0);
+const logoClickTimeoutRef = useRef(null);
+
+const handleLogoClick = () => {
+  setLogoClickCount(prev => prev + 1);
+  
+  // Clear existing timeout
+  if (logoClickTimeoutRef.current) {
+    clearTimeout(logoClickTimeoutRef.current);
+  }
+  
+  // Reset count after 1 second
+  logoClickTimeoutRef.current = setTimeout(() => {
+    setLogoClickCount(0);
+  }, 1000);
+};
+
+// Check for triple click
+useEffect(() => {
+  if (logoClickCount === 3) {
+    setShowAdminPanel(true);
+    setLogoClickCount(0);
+    showToast('Admin panel opened', 'info');
+  }
+}, [logoClickCount]);
   // ============================================
   // PDF PROCESSING
   // ============================================
@@ -1061,15 +1398,19 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             {/* Logo and branding */}
-            <div className="flex items-center space-x-2">
-              <Brain className="h-8 w-8 text-indigo-600" />
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EasylearnAI</h1>
-              {isActivated && (
-                <span className="ml-2 px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">
-                  PREMIUM
-                </span>
-              )}
-            </div>
+            {/* Logo and branding */}
+<div className="flex items-center space-x-2">
+  <Brain 
+    className="h-8 w-8 text-indigo-600 cursor-pointer" 
+    onClick={handleLogoClick}
+  />
+  <h1 className="text-xl sm:text-2xl font-bold text-gray-900">EasylearnAI</h1>
+  {isActivated && (
+    <span className="ml-2 px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full">
+      PREMIUM
+    </span>
+  )}
+</div>
             
             {/* Usage stats - Desktop only */}
             {!isActivated && (
@@ -1129,6 +1470,14 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
                 ${activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
                 <Clock className="h-4 w-4 inline mr-2" />History
               </button>
+              {isAdminAuthenticated && (
+  <button 
+    onClick={() => setActiveTab('admin')} 
+    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'admin' ? 'bg-red-100 text-red-700' : 'text-gray-500 hover:text-gray-700'}`}
+  >
+    <Shield className="h-4 w-4 inline mr-2" />Admin
+  </button>
+)}
 
             </nav>
             
@@ -1201,7 +1550,14 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
                 ${activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
                 <Clock className="h-4 w-4 inline mr-2" />History
               </button>
-
+{isAdminAuthenticated && (
+  <button 
+    onClick={() => { setActiveTab('admin'); setMobileMenuOpen(false); }} 
+    className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${activeTab === 'admin' ? 'bg-red-100 text-red-700' : 'text-gray-500'}`}
+  >
+    <Shield className="h-4 w-4 inline mr-2" />Admin
+  </button>
+)}
             </div>
           )}
         </div>
@@ -1961,7 +2317,166 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
               </div>
             </div>
           </div>
-        )}
+      )}{/* ADMIN TAB */}
+{activeTab === 'admin' && (
+  <div className="h-full overflow-y-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-4xl mx-auto">
+      {!isAdminAuthenticated ? (
+        /* Admin Login */
+        <div className="max-w-md mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="text-center mb-6">
+              <Shield className="h-12 w-12 text-red-600 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900">Admin Panel</h2>
+              <p className="text-sm text-gray-600 mt-2">Enter admin key to access</p>
+            </div>
+            
+            <input
+              type="password"
+              value={adminKey}
+              onChange={(e) => setAdminKey(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && authenticateAdmin()}
+              placeholder="Admin key"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+            />
+            
+            <button
+              onClick={authenticateAdmin}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              Authenticate
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('upload')}
+              className="w-full mt-2 px-4 py-2 text-gray-600 hover:text-gray-800"
+            >
+              Back to App
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Admin Dashboard */
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Admin Dashboard</h2>
+            <button
+              onClick={() => {
+                setIsAdminAuthenticated(false);
+                setActiveTab('upload');
+              }}
+              className="text-sm text-gray-600 hover:text-gray-800"
+            >
+              Logout
+            </button>
+          </div>
+          
+          {/* Generate Codes Section */}
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Generate Activation Codes</h3>
+            
+            <div className="flex items-end space-x-4 mb-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Number of Codes
+                </label>
+                <input
+                  type="number"
+                  value={codeCount}
+                  onChange={(e) => setCodeCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                  min="1"
+                  max="20"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              
+              <button
+                onClick={generateCodesHandler}
+                disabled={generatingCodes}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {generatingCodes ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+            
+            {generatedCodes.length > 0 && (
+              <div className="mt-6">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium text-gray-900">Generated Codes</h4>
+                  <button
+                    onClick={copyAllCodes}
+                    className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy All
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  {generatedCodes.map((code, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                      <span className="font-mono text-lg font-bold text-gray-900">{code}</span>
+                      <button
+                        onClick={() => copyCode(code)}
+                        className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 flex items-center"
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Statistics Section */}
+          <div className="border-t pt-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Statistics</h3>
+              <button
+                onClick={loadAdminStats}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Load Stats
+              </button>
+            </div>
+            
+            {adminStats && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg text-center">
+                  <div className="text-3xl font-bold text-blue-600">{adminStats.total}</div>
+                  <div className="text-sm text-gray-600">Total Codes</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg text-center">
+                  <div className="text-3xl font-bold text-green-600">{adminStats.used}</div>
+                  <div className="text-sm text-gray-600">Used</div>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg text-center">
+                  <div className="text-3xl font-bold text-yellow-600">{adminStats.unused}</div>
+                  <div className="text-sm text-gray-600">Unused</div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Instructions */}
+          <div className="border-t mt-8 pt-8">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">How to Use</h3>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600">
+              <li>Generate activation codes using the form above</li>
+              <li>Copy the codes and send them to customers who paid</li>
+              <li>Each code works only once and is tied to one device</li>
+              <li>Codes expire after 30 days if not used</li>
+              <li>Check statistics to monitor usage</li>
+            </ol>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
       </main>
     </div>
   );
