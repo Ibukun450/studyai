@@ -654,7 +654,7 @@ const copyAllCodes = () => {
   const allCodes = generatedCodes.join('\n');
   navigator.clipboard.writeText(allCodes);
   showToast(`Copied ${generatedCodes.length} codes`, 'success');
-);
+};
 
   /**
  * Handle logo clicks for admin access
