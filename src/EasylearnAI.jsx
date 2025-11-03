@@ -71,7 +71,7 @@ const EasylearnAI = () => {
   const [quizHistory, setQuizHistory] = useState([]);
   // Constants
   const API_BASE_URL = "/.netlify/functions";
-  const FREE_LIMITS = { uploads: 1, questions: 3 };
+  const FREE_LIMITS = { uploads: 1, questions: 3, quizzes: 5};
 
   // ============================================
   // EFFECTS & LIFECYCLE
@@ -334,7 +334,23 @@ useEffect(() => {
    * Validate and activate premium features
    */
   const handleActivation = () => {
-    const validCodes = ['EASYLEARN2025', 'PREMIUM123', 'UNLOCKNOW'];
+    const validCodes = [
+  "rAyutmR84juPGY8yDdE6",
+  "w6uRwwdDHPDkNsPg29Rs",
+  "UQ5uaQSKgf4DA79HJsAg",
+  "geEVx7pXNdpQMCJDA64f",
+  "X2yuk5fX3kf5qaWp9p5Q",
+  "T6tgEEEpBzEkSMuHuZZk",
+  "K4BaRkZLJqrY4kvhcuPP",
+  "cgCYXPRYCV8TyzJLF8Mu",
+  "d7dpW8ySBJnDyqY9WAnS",
+  "3HL738fBz3Nmd5K3Fybf",
+  "zF63jtGCptTbkkT3dSJ6",
+  "GPeYGTKYF6xsjyWwcLZA",
+  "AWhwaUr2Zb5wTU2JMppT",
+  "JR2DA4Wjd54vYXX7kfNE",
+  "J9bbZamzJC5tQnQUGQpR"
+];
     if (validCodes.includes(activationCode.toUpperCase())) {
       setIsActivated(true);
       localStorage.setItem('easylearnai_activated', 'true');
@@ -608,11 +624,11 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
 
 
   const generateQuiz = async (doc) => {
-    // // if (hasReachedLimit('quizzes')) {
-    // //   setShowActivationModal(true);
-    // //   setShowQuizConfig(false);
-    // //   return;
-    // }
+     if (hasReachedLimit('quizzes')) {
+     setShowActivationModal(true);
+       setShowQuizConfig(false);
+    return;
+   }
     
     const config = quizConfig;
     setError(null);
@@ -1892,26 +1908,14 @@ fullText += paragraphs.join('\n\n') + "\n\n---\n\n";
                   <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Ready to Upgrade Your Learning?</h3>
                   <p className="text-sm sm:text-base text-gray-600 mb-6">Contact us to get your activation code and unlock premium features instantly</p>
                   <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
+                    
                     <a 
-                      href="https://wa.me/2347069928785" 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm sm:text-base"
-                    >
-                      <MessageSquare className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />WhatsApp Us
-                    </a>
-                    <a 
-                      href="mailto:dibukun45@gmail.com" 
+                      href="mailto:dibukun555@gmail.com" 
                       className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm sm:text-base"
                     >
                       <Mail className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />Email Us
                     </a>
-                    <a 
-                      href="tel:+2347069928785" 
-                      className="inline-flex items-center px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base"
-                    >
-                      <Phone className="h-4 sm:h-5 w-4 sm:w-5 mr-2" />Call Us
-                    </a>
+                    
                   </div>
                 </div>
               </div>
