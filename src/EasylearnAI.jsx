@@ -334,7 +334,6 @@ useEffect(() => {
    * Validate and activate premium features
    */
   const handleActivation = () => {
-  const handleActivation = () => {
     const validCodes = [
         "rAyutmR84juPGY8yDdE6",
         "w6uRwwdDHPDkNsPg29Rs",
