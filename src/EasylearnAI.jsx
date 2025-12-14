@@ -334,34 +334,43 @@ useEffect(() => {
    * Validate and activate premium features
    */
   const handleActivation = () => {
+  const handleActivation = () => {
     const validCodes = [
-  "rAyutmR84juPGY8yDdE6",
-  "w6uRwwdDHPDkNsPg29Rs",
-  "UQ5uaQSKgf4DA79HJsAg",
-  "geEVx7pXNdpQMCJDA64f",
-  "X2yuk5fX3kf5qaWp9p5Q",
-  "T6tgEEEpBzEkSMuHuZZk",
-  "K4BaRkZLJqrY4kvhcuPP",
-  "cgCYXPRYCV8TyzJLF8Mu",
-  "d7dpW8ySBJnDyqY9WAnS",
-  "3HL738fBz3Nmd5K3Fybf",
-  "zF63jtGCptTbkkT3dSJ6",
-  "GPeYGTKYF6xsjyWwcLZA",
-  "AWhwaUr2Zb5wTU2JMppT",
-  "JR2DA4Wjd54vYXX7kfNE",
-  "J9bbZamzJC5tQnQUGQpR"
-];
-    if (validCodes.includes(activationCode.toUpperCase())) {
-      setIsActivated(true);
-      localStorage.setItem('easylearnai_activated', 'true');
-      setShowActivationModal(false);
-      setActivationCode('');
-      setError(null);
-      showToast('Activation successful! You now have unlimited access.', 'success');
+        "rAyutmR84juPGY8yDdE6",
+        "w6uRwwdDHPDkNsPg29Rs",
+        "UQ5uaQSKgf4DA79HJsAg",
+        "geEVx7pXNdpQMCJDA64f",
+        "X2yuk5fX3kf5qaWp9p5Q",
+        "T6tgEEEpBzEkSMuHuZZk",
+        "K4BaRkZLJqrY4kvhcuPP",
+        "cgCYXPRYCV8TyzJLF8Mu",
+        "d7dpW8ySBJnDyqY9WAnS",
+        "3HL738fBz3Nmd5K3Fybf",
+        "zF63jtGCptTbkkT3dSJ6",
+        "GPeYGTKYF6xsjyWwcLZA",
+        "AWhwaUr2Zb5wTU2JMppT",
+        "JR2DA4Wjd54vYXX7kfNE",
+        "J9bbZamzJC5tQnQUGQpR"
+    ];
+
+    // ✅ FIX: Use Array.prototype.some() for case-insensitive comparison.
+    // This checks if AT LEAST ONE code in the list, when converted to uppercase, 
+    // matches the user's input, converted to uppercase.
+    const isCodeValid = validCodes.some(code => 
+        code.toUpperCase() === activationCode.toUpperCase()
+    );
+
+    if (isCodeValid) {
+        setIsActivated(true);
+        localStorage.setItem('easylearnai_activated', 'true');
+        setShowActivationModal(false);
+        setActivationCode('');
+        setError(null);
+        showToast('Activation successful! You now have unlimited access.', 'success');
     } else {
-      setError('Invalid activation code. Please contact support.');
+        setError('Invalid activation code. Please contact support.');
     }
-  };
+};
 
   // ============================================
   // PDF PROCESSING
