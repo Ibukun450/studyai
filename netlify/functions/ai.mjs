@@ -43,8 +43,8 @@ exports.handler = async (event, context) => {
         }
 
         const { message, context: docContext, temperature, max_tokens } = JSON.parse(event.body);
-        const modelName = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
-
+         // Use a highly stable free model for testing
+const modelName = process.env.OPENROUTER_MODEL || 'mistralai/mistral-7b-instruct:free';
         console.log('Calling OpenRouter API with model:', modelName);
 
         // ✅ Use native fetch directly (no import)
